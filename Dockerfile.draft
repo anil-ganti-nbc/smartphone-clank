@@ -1,0 +1,105 @@
+# =============================================================================
+# DRAFT — architecture preparation only. NOT built, NOT tested, NOT deployed.
+# Tier D cloud-migration phase for Smartphone Intel Clank: this file is a
+# planning artifact showing what a *future* Linux/Docker port could look
+# like. Do not `docker build` this without a deliberate follow-up phase that
+# re-verifies every assumption below against the real dependency set.
+#
+# Known gaps this draft deliberately does NOT resolve (see
+# ai/handoff/CLOUD_READINESS_BLOCKERS.md for detail):
+#   - CLANK_DATA_DIR / CLANK_BACKUP_DIR / CLANK_REPORT_DIR / CLANK_DATABASE_URL
+#     are declared in .env.example but are NOT read by config/settings.py
+#     today — setting them here as ENV vars will have NO EFFECT until that
+#     wiring is actually implemented (a change to config/settings.py, out of
+#     scope for this phase).
+#   - The scheduler model (runtime/daemon.py's BlockingScheduler, long-lived)
+#     vs. this migration's preferred one-shot "external scheduler + docker
+#     run + exit" pattern is UNDECIDED — see the open question in
+#     ai/handoff/CLOUD_READINESS_CHECKLIST.md. This draft shows a long-lived
+#     CMD as the closest match to current runtime/daemon.py behavior, but
+#     that is not an endorsement of option (a) over (b) — just the option
+#     that requires zero changes to runtime/daemon.py to sketch.
+#   - lxml/selectolax native-extension build requirements against
+#     python:3.12-slim have not been verified (no `pip install` has been run
+#     against this Dockerfile).
+#   - playwright is in requirements.txt but unused by any current collector;
+#     deliberately NOT installing browser binaries here. If a future
+#     collector starts using it, this file will need
+#     `playwright install --with-deps chromium` added.
+# =============================================================================
+
+FROM python:3.12-slim-bookworm
+
+LABEL clank.id="smartphone-clank"
+LABEL clank.tier="D-architecture-prep-draft"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Non-root user, matching the pattern used elsewhere in this migration
+# (Free Game Tracker's Dockerfile: useradd --create-home --uid 10001).
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin clank
+
+# NOTE: not verified — lxml/selectolax may need build-essential/libxml2-dev
+# on slim images. Left commented deliberately; uncomment and verify in a
+# real build phase, not here.
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#       gcc libxml2-dev libxslt1-dev \
+#     && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt
+
+# Application code. Deliberately mirrors this repo's existing module layout;
+# no restructuring implied or required.
+COPY main.py pipeline.py ./
+COPY config ./config
+COPY collectors ./collectors
+COPY entity_resolution ./entity_resolution
+COPY normalizers ./normalizers
+COPY alerts ./alerts
+COPY database ./database
+COPY models ./models
+COPY knowledge ./knowledge
+COPY observability ./observability
+COPY dashboard ./dashboard
+COPY runtime ./runtime
+COPY alembic.ini ./alembic.ini
+COPY alembic ./alembic
+
+# Data/backup/report directories created at build time so the non-root user
+# can write to them even before any volume is mounted over them at runtime.
+RUN mkdir -p /app/data /app/data/backups /app/runtime/logs /app/runtime/reports \
+    && chown -R clank:clank /app
+
+USER clank
+
+# --- OPEN QUESTION: entrypoint / process model -----------------------------
+# Two real options exist; this draft does not choose between them (see
+# ai/handoff/CLOUD_READINESS_CHECKLIST.md "Open design question"):
+#
+#   (a) Long-lived daemon, unchanged from today's runtime/daemon.py:
+#         CMD ["python", "-m", "runtime.daemon"]
+#       Needs an external process supervisor (compose `restart:
+#       unless-stopped`-equivalent) because BlockingScheduler never exits on
+#       its own. Zero changes to runtime/daemon.py required.
+#
+#   (b) One-shot invocation, matching this migration's preferred pattern
+#       elsewhere (Free Game Tracker/OEM Radar — external cron/scheduler
+#       triggers `docker run`, container exits when done):
+#         CMD ["python", "main.py", "run", "--once"]
+#       This already exists as a CLI flag today (main.py's `run --once`),
+#       so it needs NO new code — but it means the container never runs
+#       runtime/daemon.py's BlockingScheduler at all, making that module
+#       effectively dead in this deployment shape. That's a bigger
+#       architectural statement than this draft is authorized to make.
+#
+# Left as option (a) below ONLY because it requires zero runtime/ changes to
+# even sketch — this is not a recommendation. A real port must make this
+# decision deliberately, as a product/architecture call, not by default.
+# -----------------------------------------------------------------------------
+CMD ["python", "-m", "runtime.daemon"]

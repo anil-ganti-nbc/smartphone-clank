@@ -1,0 +1,70 @@
+# =============================================================================
+# DRAFT — architecture preparation only. NOT run, NOT validated with
+# `docker compose config`, NOT deployed. Tier D cloud-migration phase for
+# Smartphone Intel Clank. See Dockerfile.draft and
+# ai/handoff/CLOUD_READINESS_CHECKLIST.md / CLOUD_READINESS_BLOCKERS.md for
+# the caveats this file assumes.
+#
+# IMPORTANT: the CLANK_* environment variables below match what
+# .env.example advertises, but as of this baseline (commit eddf335),
+# config/settings.py does NOT read CLANK_DATA_DIR, CLANK_BACKUP_DIR,
+# CLANK_REPORT_DIR, or CLANK_DATABASE_URL — setting them here is purely
+# illustrative of the *intended future* interface, not something that
+# currently changes application behavior. See
+# ai/handoff/CLOUD_READINESS_BLOCKERS.md item 1 before treating this as
+# working config.
+#
+# This file also does not resolve the scheduler-model open question (see
+# Dockerfile.draft). It shows the long-lived-daemon shape (option a)
+# because that's the one requiring zero runtime/ changes to sketch, not
+# because it's been chosen.
+# =============================================================================
+
+services:
+  smartphone-clank:
+    build:
+      context: .
+      dockerfile: Dockerfile.draft
+    image: smartphone-clank:draft-do-not-deploy
+    container_name: smartphone-clank-draft
+    # restart: unless-stopped   # <- only applicable under scheduler option (a);
+                                  #    would be `restart: "no"` under option (b)
+                                  #    (external scheduler + one-shot `docker run`).
+                                  #    Left commented — undecided, see Dockerfile.draft.
+    restart: "no"
+
+    environment:
+      # --- Illustrative only; not wired today, see header note above. ---
+      CLANK_DATABASE_URL: sqlite:////app/data/clank.db
+      CLANK_DATA_DIR: /app/data
+      CLANK_BACKUP_DIR: /app/data/backups
+      CLANK_REPORT_DIR: /app/runtime/reports
+      # --- Actually consumed today (confirmed by grep of config/settings.py
+      #     and runtime/daemon.py): ---
+      CLANK_LOG_LEVEL: ${CLANK_LOG_LEVEL:-INFO}
+      CLANK_CONFIG: config/config.yaml
+      # Secrets: never bake into the image; inject at run time, matching the
+      # existing "env vars win over YAML" precedence already implemented in
+      # config/settings.py.
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      MAINTENANCE_DISCORD_WEBHOOK_URL: ${MAINTENANCE_DISCORD_WEBHOOK_URL:-}
+
+    volumes:
+      # Named volume for the SQLite DB + backups, so container recreation
+      # doesn't lose data. Matches the pattern used by Free Game Tracker
+      # (fgt_data volume) and OEM Radar elsewhere in this migration.
+      - clank_data:/app/data
+      - clank_runtime:/app/runtime
+
+    # No ports published — this app has no public-facing service in its
+    # current form (the FastAPI dashboard in dashboard/app.py is a separate,
+    # optional local tool; whether it ships in a future container image at
+    # all is its own undecided question, not addressed by this draft).
+
+    # No Docker socket mount. No privileged mode.
+
+volumes:
+  clank_data:
+    name: smartphone_clank_draft_data
+  clank_runtime:
+    name: smartphone_clank_draft_runtime

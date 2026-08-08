@@ -1,0 +1,264 @@
+# Smartphone Intel Clank v0.1 Configuration
+
+database:
+  url: "sqlite:///./data/clank.db"
+  echo: false
+
+discord:
+  webhook_url: ""  # newsroom channel — set via env DISCORD_WEBHOOK_URL or here
+  maintenance_webhook_url: ""  # maintenance channel — set via env MAINTENANCE_DISCORD_WEBHOOK_URL or here
+  enabled: true
+  min_confidence_for_alert: 20
+  significant_confidence_delta: 15
+
+logging:
+  level: INFO
+  file: "logs/clank.log"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+manufacturers:
+  - samsung
+  - google
+  - oneplus
+  - nothing
+  - xiaomi
+
+# Confidence weights (configurable)
+confidence_weights:
+  support_page: 10
+  certification: 20
+  firmware: 25
+  ota: 20
+  retail_listing: 35
+  official_announcement: 100
+
+# Collector settings
+collectors:
+  bis:
+    enabled: false
+    interval_minutes: 180  # 3 hours
+    timeout: 30
+    max_retries: 3
+
+  bluetooth_sig:
+    enabled: false  # disabled: Samsung-only production scope
+    interval_minutes: 240  # 4 hours
+    timeout: 30
+    max_retries: 3
+
+  tdra:
+    enabled: false
+    interval_minutes: 240
+    timeout: 30
+    max_retries: 3
+
+  imda:
+    enabled: false
+    interval_minutes: 240
+    timeout: 30
+    max_retries: 3
+
+  fcc:
+    enabled: false  # Often rate-limited / complex; enable carefully
+    interval_minutes: 360
+    timeout: 45
+    max_retries: 2
+
+  samsung_us_support_sitemap:
+    enabled: true
+    interval_minutes: 180
+    max_product_fetches: 60
+    min_refetch_hours: 12
+    failed_retry_minutes: 180
+    traversal_strategy: oldest_checked_first
+  samsung_support:
+    enabled: false  # secondary monitoring only
+    interval_minutes: 45
+    timeout: 30
+    max_retries: 3
+
+  google_support:
+    enabled: false  # disabled: unvalidated / marketing-text pollution
+    interval_minutes: 60
+    timeout: 30
+    max_retries: 3
+
+  oneplus_support:
+    enabled: false  # disabled: unvalidated / marketing-text pollution
+    interval_minutes: 60
+    timeout: 30
+    max_retries: 3
+
+  nothing_support:
+    enabled: false  # disabled until strict parser
+    interval_minutes: 60
+    timeout: 30
+    max_retries: 3
+
+  xiaomi_support:
+    enabled: false  # disabled: source 403 / unvalidated
+    interval_minutes: 60
+    timeout: 30
+    max_retries: 3
+
+  samsung_firmware:
+    enabled: false  # disabled: not primary discovery
+    interval_minutes: 300  # 5 hours
+    timeout: 30
+    max_retries: 3
+
+  pixel_ota:
+    enabled: false  # disabled: Samsung-only scope
+    interval_minutes: 360
+    timeout: 30
+    max_retries: 3
+
+  nothing_ota:
+    enabled: false  # disabled: Samsung-only scope
+    interval_minutes: 360
+    timeout: 30
+    max_retries: 3
+
+# Rate limiting / politeness
+http:
+  user_agent: "SmartphoneIntelClank/0.1 (research; respectful crawler; contact: local)"
+  default_timeout: 30
+  max_concurrent: 2
+  respect_robots: true
+  min_delay_seconds: 1.5
+  cache_ttl_hours: 6
+
+# Entity resolution
+entity_resolution:
+  # Model number similarity thresholds
+  exact_match_boost: 50
+  prefix_match_min_length: 6
+  # Treat these as regional variants of the same family
+  regional_suffixes:
+    - B   # India / global
+    - U   # USA
+    - N   # Korea
+    - W   # Canada
+    - 0   # China sometimes
+    - E
+    - J
+    - Z
+
+# v0.2 Intelligence Layer
+intelligence:
+  knowledge_data_dir: "knowledge/data"
+  apply_decay_on_resolve: true
+  decay_schedule:
+    # days_after_first_seen: remaining_fraction
+    - [30, 0.90]
+    - [90, 0.75]
+    - [180, 0.50]
+    - [365, 0.30]
+  never_decay_source_types:
+    - official
+  change_detection:
+    alert_on_meaningful_only: true
+
+# v0.2.1 Support-page change detection
+support_page_normalization:
+  samsung:
+    ignore_selectors:
+      - ".cookie-banner"
+      - ".cookie-notice"
+      - ".recommended-products"
+      - ".chat-widget"
+    strip_query_parameters:
+      - "utm_source"
+      - "utm_campaign"
+      - "utm_medium"
+      - "fbclid"
+  google:
+    ignore_selectors:
+      - ".cookie-banner"
+      - "#cookieBar"
+    strip_query_parameters:
+      - "utm_source"
+      - "utm_campaign"
+  oneplus:
+    ignore_selectors:
+      - ".cookie-banner"
+    strip_query_parameters:
+      - "utm_source"
+  nothing:
+    ignore_selectors:
+      - ".cookie-banner"
+    strip_query_parameters:
+      - "utm_source"
+  xiaomi:
+    ignore_selectors:
+      - ".cookie-banner"
+    strip_query_parameters:
+      - "utm_source"
+
+page_removal:
+  consecutive_not_found_required: 3
+  confirmation_window_hours: 24
+  treat_403_as_removed: false
+  treat_429_as_removed: false
+  treat_5xx_as_removed: false
+
+support_change_weights:
+  new_page: 10
+  model_reference_added: 8
+  download_added:
+    user_manual: 18
+    firmware: 20
+    regulatory_document: 15
+    generic_document: 3
+  product_image_added: 10
+  title_changed: 3
+  page_restored: 2
+
+# v0.2.1 Support-page change detection
+support_page_normalization:
+  samsung:
+    ignore_selectors:
+      - ".cookie-banner"
+      - ".recommended-products"
+      - ".chat-widget"
+    strip_query_parameters:
+      - "utm_source"
+      - "utm_campaign"
+      - "fbclid"
+  google:
+    ignore_selectors:
+      - ".cookie-banner"
+      - ".recommendations"
+  oneplus:
+    ignore_selectors:
+      - ".cookie-banner"
+  nothing:
+    ignore_selectors:
+      - ".cookie-banner"
+  xiaomi:
+    ignore_selectors:
+      - ".cookie-banner"
+
+page_removal:
+  consecutive_not_found_required: 3
+  confirmation_window_hours: 24
+  treat_403_as_removed: false
+  treat_429_as_removed: false
+  treat_5xx_as_removed: false
+
+support_change_weights:
+  new_page: 10
+  model_reference_added: 8
+  download_added:
+    user_manual: 18
+    firmware: 20
+    regulatory_document: 15
+    generic_document: 3
+  product_image_added: 10
+  title_changed: 3
+  page_restored: 2
+
+
+snapshots:
+  max_per_url: 20

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{% block title %}Clank Newsroom{% endblock %}</title>
+  <style>
+    :root { --bg:#0f1419; --card:#1a2332; --text:#e7ecf3; --muted:#8b9bb4; --accent:#3d8bfd; --ok:#3dd68c; --warn:#f5a524; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, sans-serif; background:var(--bg); color:var(--text); }
+    header { background:#111827; border-bottom:1px solid #243044; padding:12px 20px; display:flex; gap:20px; align-items:center; }
+    header a { color:var(--muted); text-decoration:none; font-size:14px; }
+    header a:hover { color:var(--text); }
+    header .brand { color:var(--accent); font-weight:700; margin-right:12px; }
+    main { max-width:1100px; margin:0 auto; padding:20px; }
+    .card { background:var(--card); border:1px solid #243044; border-radius:10px; padding:16px; margin-bottom:16px; }
+    h1,h2 { margin:0 0 12px; font-size:18px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { text-align:left; padding:8px 6px; border-bottom:1px solid #243044; }
+    th { color:var(--muted); font-weight:600; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#243044; color:var(--muted); }
+    .badge.ok { background:#143528; color:var(--ok); }
+    .badge.warn { background:#3a2a12; color:var(--warn); }
+    input, select, button { background:#0f1419; color:var(--text); border:1px solid #243044; border-radius:6px; padding:8px 10px; }
+    button { background:var(--accent); border:none; cursor:pointer; }
+    .muted { color:var(--muted); }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    @media (max-width:800px) { .grid { grid-template-columns:1fr; } }
+    code { background:#0f1419; padding:1px 5px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">Clank</a>
+    <a href="/">Home</a>
+    <a href="/devices">Devices</a>
+    <a href="/health">Sources</a>
+    <a href="/metrics">Metrics</a>
+    <a href="/discord">Discord</a>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

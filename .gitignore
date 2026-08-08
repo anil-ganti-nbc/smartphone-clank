@@ -1,0 +1,23 @@
+# Operator-local config overlay — never commit, never let an upgrade touch this.
+config/config.local.yaml
+
+# Secrets
+.env
+
+# Runtime data
+data/
+logs/
+runtime/backups/
+runtime/logs/
+runtime/pids/
+runtime/reports/
+runtime/diagnostics/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Windows executables (defensive)
+*.exe

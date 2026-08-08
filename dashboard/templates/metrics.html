@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Metrics · Clank{% endblock %}
+{% block content %}
+<h1>Collector metrics</h1>
+<p class="muted">Immutable run history · health scores · regression notes in run records</p>
+
+<div class="card">
+  <h2>Database</h2>
+  <table>
+    <tr><th>Devices</th><th>Evidence</th><th>Snapshots</th><th>Run metrics rows</th><th>DB bytes</th></tr>
+    <tr>
+      <td>{{ db.devices }}</td>
+      <td>{{ db.evidence }}</td>
+      <td>{{ db.snapshots }}</td>
+      <td>{{ db.run_metrics }}</td>
+      <td>{{ db.database_bytes or "—" }}</td>
+    </tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Collectors</h2>
+  <table>
+    <tr>
+      <th>Collector</th>
+      <th>Health</th>
+      <th>Score</th>
+      <th>Last success</th>
+      <th>Avg ms</th>
+      <th>Median ms</th>
+      <th>Runs 24h</th>
+      <th>Success 24h</th>
+      <th>Parser fail 24h</th>
+      <th>HTTP fail 24h</th>
+      <th>Discoveries 24h</th>
+      <th>Alerts 24h</th>
+      <th>Avg pages</th>
+      <th>Avg candidates</th>
+    </tr>
+    {% for r in rows %}
+    <tr>
+      <td><code>{{ r.collector }}</code></td>
+      <td>
+        {% if r.health.score is none %}
+          <span class="badge">{{ r.health.label }}</span>
+        {% elif r.health.score >= 90 %}
+          <span class="badge ok">{{ r.health.label }}</span>
+        {% elif r.health.score >= 50 %}
+          <span class="badge warn">{{ r.health.label }}</span>
+        {% else %}
+          <span class="badge warn">{{ r.health.label }}</span>
+        {% endif %}
+      </td>
+      <td><strong>{{ r.health.score if r.health.score is not none else "—" }}</strong></td>
+      <td class="muted">{{ r.last_successful or "—" }}</td>
+      <td>{{ "%.0f"|format(r.avg_runtime_ms) if r.avg_runtime_ms is not none else "—" }}</td>
+      <td>{{ "%.0f"|format(r.median_runtime_ms) if r.median_runtime_ms is not none else "—" }}</td>
+      <td>{{ r.runs_24h }}</td>
+      <td>{{ "%.0f%%"|format(r.success_rate_24h * 100) if r.success_rate_24h is not none else "—" }}</td>
+      <td>{{ r.parser_failures_24h }}</td>
+      <td>{{ r.http_failures_24h }}</td>
+      <td>{{ r.meaningful_discoveries_24h }}</td>
+      <td>{{ r.alerts_24h }}</td>
+      <td>{{ "%.1f"|format(r.avg_pages_fetched) if r.avg_pages_fetched is not none else "—" }}</td>
+      <td>{{ "%.1f"|format(r.avg_candidates) if r.avg_candidates is not none else "—" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="14" class="muted">No runs recorded yet. Run collectors or <code>python main.py demo long-run</code>.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% for r in rows %}
+{% if r.health.factors %}
+<div class="card">
+  <h2>{{ r.collector }} — score factors</h2>
+  <table>
+    <tr><th>Reason</th><th>Delta</th><th>Value</th></tr>
+    {% for f in r.health.factors %}
+    <tr>
+      <td>{{ f.reason }}</td>
+      <td>{{ f.delta }}</td>
+      <td class="muted">{{ f.value if f.value is defined else "—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,50 @@
+# Windows unattended runtime configuration (no secrets)
+# Override via environment variables or local untracked .env
+
+runtime:
+  mode: production
+  validation_days: 7
+
+dashboard:
+  host: "127.0.0.1"
+  port: 8200
+
+paths:
+  # Relative to repository root unless absolute
+  data_dir: "data"
+  log_dir: "runtime/logs"
+  pid_dir: "runtime/pids"
+  backup_dir: "runtime/backups"
+  report_dir: "runtime/reports"
+  diagnostics_dir: "runtime/diagnostics"
+
+logging:
+  max_bytes: 10485760   # 10 MB
+  backup_count: 10
+  level: INFO
+
+health:
+  check_interval_minutes: 15
+  min_free_disk_gb: 10
+  max_db_growth_pct_24h: 25
+  max_runtime_staleness_minutes: 360
+  restart_on_failure: true
+  max_auto_restarts_per_hour: 3
+
+backup:
+  daily_retain: 14
+  weekly_retain: 8
+
+scheduler_tasks:
+  restart_interval_minutes: 2
+  restart_count: 5
+  failure_window_minutes: 30
+
+# Installer rejects non-live sources unless -AllowNonLiveSources
+source_policy:
+  reject_statuses:
+    - BLOCKED
+    - UNSUPPORTED
+    - FIXTURE_ONLY
+    - UNAVAILABLE
+    - NOT_RELEVANT

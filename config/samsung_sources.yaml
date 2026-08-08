@@ -1,0 +1,116 @@
+# Samsung Source Registry — v0.3
+# validation_status: LIVE_VALIDATED | LIVE_PARTIAL | FIXTURE_ONLY | BLOCKED | UNSTABLE | UNSUPPORTED
+
+samsung:
+  kill_switch: false
+  user_agent: "SmartphoneIntelClank/0.3 (research; respectful crawler)"
+  max_response_bytes: 5_000_000
+  default_timeout_seconds: 25
+  min_delay_seconds: 2.0
+  jitter_seconds: 0.8
+  max_requests_per_run: 15
+
+  alert_categories:
+    - smartphone
+    - foldable
+    - tablet
+
+  sources:
+
+    samsung_us_support_sitemap:
+      enabled: true
+      display_name: "Samsung US Support Sitemap"
+      region: US
+      locale: en-US
+      source_type: sitemap
+      validation_status: LIVE_VALIDATED
+      interval_minutes: 360
+      max_requests_per_run: 20
+      base_url: "https://www.samsung.com/us/support_sitemap.xml"
+      parser: samsung_sitemap_phone_products
+      notes: "True discovery. 126+ phone product support URLs without slug seeding. Validated 2026-08-02."
+
+    samsung_us_owners_product:
+      enabled: true
+      display_name: "Samsung US Owners Product Pages"
+      region: US
+      locale: en-US
+      source_type: product_support
+      validation_status: LIVE_VALIDATED
+      interval_minutes: 180
+      max_requests_per_run: 10
+      base_url: "https://www.samsung.com/us/support/owners/product/"
+      # Seed paths validated live 2026-08-02
+      seed_paths:
+        - galaxy-s24-ultra
+        - galaxy-s24
+        - galaxy-s24-plus
+        - galaxy-z-fold6
+        - galaxy-z-flip6
+        - galaxy-a55-5g
+        - galaxy-a35-5g
+      parser: samsung_us_product_page
+      notes: "Static HTML contains SM- model numbers. Validated live."
+
+    samsung_us_support_landing:
+      enabled: true
+      display_name: "Samsung US Support Landing"
+      region: US
+      locale: en-US
+      source_type: support_index
+      validation_status: LIVE_PARTIAL
+      interval_minutes: 360
+      max_requests_per_run: 2
+      base_url: "https://www.samsung.com/us/support/"
+      parser: samsung_generic_text
+      notes: "Returns 200 but zero SM- candidates in static HTML (JS search UI)."
+
+    samsung_in_support:
+      enabled: false
+      display_name: "Samsung India Support"
+      region: IN
+      locale: en-IN
+      source_type: support_index
+      validation_status: BLOCKED
+      interval_minutes: 240
+      max_requests_per_run: 5
+      base_url: "https://www.samsung.com/in/support/mobile-devices/"
+      parser: samsung_generic_text
+      notes: "HTTP 403 from current egress (Akamai). Do not enable until LIVE_VALIDATED."
+
+    samsung_uk_support:
+      enabled: false
+      display_name: "Samsung UK Support"
+      region: GB
+      locale: en-GB
+      source_type: support_index
+      validation_status: BLOCKED
+      interval_minutes: 240
+      max_requests_per_run: 5
+      base_url: "https://www.samsung.com/uk/support/mobile-devices/"
+      parser: samsung_generic_text
+      notes: "HTTP 403 from current egress."
+
+    samsung_de_support:
+      enabled: false
+      display_name: "Samsung Germany Support"
+      region: DE
+      locale: de-DE
+      source_type: support_index
+      validation_status: UNSUPPORTED
+      interval_minutes: 240
+      base_url: "https://www.samsung.com/de/support/"
+      parser: samsung_generic_text
+      notes: "Not yet reconnoitered."
+
+    samsung_kr_support:
+      enabled: false
+      display_name: "Samsung Korea Support"
+      region: KR
+      locale: ko-KR
+      source_type: support_index
+      validation_status: UNSUPPORTED
+      interval_minutes: 240
+      base_url: "https://www.samsung.com/sec/support/"
+      parser: samsung_generic_text
+      notes: "Not yet reconnoitered."

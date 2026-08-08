@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Device queue · Clank{% endblock %}
+{% block content %}
+<h1>Device queue</h1>
+<form method="get" style="margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap;">
+  <input name="q" value="{{ q }}" placeholder="Search model, name, family…"/>
+  <input name="manufacturer" value="{{ manufacturer }}" placeholder="manufacturer"/>
+  <button type="submit">Filter</button>
+</form>
+<div class="card">
+  <table>
+    <tr><th>Model</th><th>Marketing</th><th>Mfr</th><th>Family</th><th>Conf</th><th>Last seen</th></tr>
+    {% for d in devices %}
+    <tr>
+      <td><a href="/devices/{{ d.model_number }}"><code>{{ d.model_number }}</code></a></td>
+      <td>{{ d.marketing_name or "—" }}</td>
+      <td>{{ d.manufacturer }}</td>
+      <td>{{ d.family_name or "—" }}</td>
+      <td>{{ d.confidence }}</td>
+      <td class="muted">{{ d.last_seen }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">No matches</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

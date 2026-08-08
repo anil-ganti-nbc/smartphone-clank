@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}{{ device.model_number }} · Clank{% endblock %}
+{% block content %}
+<h1>{{ device.marketing_name or device.model_number }}</h1>
+<p class="muted">
+  <code>{{ device.model_number }}</code>
+  · {{ device.manufacturer }}
+  · family {{ device.family_name or "—" }}
+  · tier {{ device.product_tier or "—" }}
+  · variant {{ device.variant_label or "—" }}
+</p>
+
+<div class="grid">
+  <div class="card">
+    <h2>Identity</h2>
+    <table>
+      <tr><th>Confidence</th><td><strong>{{ device.confidence }}</strong></td></tr>
+      <tr><th>First seen</th><td>{{ device.first_seen }}</td></tr>
+      <tr><th>Last seen</th><td>{{ device.last_seen }}</td></tr>
+      <tr><th>Release state</th><td><span class="badge">unknown</span> <span class="muted">(default — not inferred from novelty)</span></td></tr>
+      <tr><th>Is variant</th><td>{{ device.is_variant }}</td></tr>
+    </table>
+    <p><a href="/export/device/{{ device.model_number }}.md">Export Markdown</a>
+       · <a href="/api/device/{{ device.model_number }}">JSON</a></p>
+  </div>
+  <div class="card">
+    <h2>Confidence ledger</h2>
+    <p>Stored: <strong>{{ device.confidence }}</strong> · Ledger-derived: <strong>{{ ledger.confidence }}</strong>
+    {% if device.confidence == ledger.confidence %}
+      <span class="badge ok">verified</span>
+    {% else %}
+      <span class="badge warn">drift</span>
+    {% endif %}
+    </p>
+    <table>
+      <tr><th>Pts</th><th>Rule</th><th>Explanation</th></tr>
+      {% for c in ledger.contributions %}
+      <tr>
+        <td>{{ c.points }}</td>
+        <td><code>{{ c.rule }}</code></td>
+        <td class="muted">{{ c.explanation }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">No ledger entries</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Aliases</h2>
+  {% for a in aliases %}
+    <span class="badge">{{ a.alias_type }}: {{ a.value }}</span>
+  {% else %}
+    <span class="muted">None</span>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>Evidence</h2>
+  <table>
+    <tr><th>Source</th><th>Type</th><th>Weight</th><th>URL</th></tr>
+    {% for e in evidence %}
+    <tr>
+      <td>{{ e.source }}</td>
+      <td>{{ e.source_type }}</td>
+      <td>{{ e.confidence_contribution }} (orig {{ e.original_weight }})</td>
+      <td class="muted">{{ e.url or "—" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">No evidence</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>Timeline</h2>
+  <table>
+    <tr><th>When</th><th>Source</th><th>Type</th><th>Title</th></tr>
+    {% for t in timeline %}
+    <tr>
+      <td class="muted">{{ t.occurred_at }}</td>
+      <td>{{ t.source or "—" }}</td>
+      <td>{{ t.event_type }}</td>
+      <td>{{ t.title or "—" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">Empty</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>Snapshots</h2>
+  <table>
+    <tr><th>Fetched</th><th>Status</th><th>Meaningful</th><th>Classifications</th></tr>
+    {% for s in snapshots %}
+    <tr>
+      <td class="muted">{{ s.fetched_at }}</td>
+      <td>{{ s.status_code }}</td>
+      <td>{{ s.meaningful }}</td>
+      <td>{{ s.classifications }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">None</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

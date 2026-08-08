@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Source health · Clank{% endblock %}
+{% block content %}
+<h1>Samsung source registry</h1>
+<p class="muted">Validation status from config — not invented at runtime</p>
+<div class="card">
+  <table>
+    <tr><th>Source</th><th>Enabled</th><th>Status</th><th>Region</th><th>Notes</th></tr>
+    {% for sid, src in sources.items() %}
+    <tr>
+      <td><code>{{ sid }}</code></td>
+      <td>{{ src.enabled }}</td>
+      <td>
+        {% if src.validation_status == "LIVE_VALIDATED" %}
+          <span class="badge ok">{{ src.validation_status }}</span>
+        {% elif src.validation_status == "BLOCKED" %}
+          <span class="badge warn">{{ src.validation_status }}</span>
+        {% else %}
+          <span class="badge">{{ src.validation_status }}</span>
+        {% endif %}
+      </td>
+      <td>{{ src.region }}</td>
+      <td class="muted">{{ src.notes or "" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

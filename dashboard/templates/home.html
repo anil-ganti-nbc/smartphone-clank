@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Newsroom Home · Clank{% endblock %}
+{% block content %}
+<h1>Newsroom overview</h1>
+<p class="muted">Local console · facts only · release-state defaults to unknown</p>
+<div class="grid">
+  <div class="card">
+    <h2>Recent activity</h2>
+    <table>
+      <tr><th>Model</th><th>Name</th><th>Conf</th><th>Family</th></tr>
+      {% for d in devices %}
+      <tr>
+        <td><a href="/devices/{{ d.model_number }}">{{ d.model_number }}</a></td>
+        <td>{{ d.marketing_name or "—" }}</td>
+        <td>{{ d.confidence }}</td>
+        <td>{{ d.family_name or "—" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No devices yet. Run discovery or demo populate.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <h2>Highest confidence</h2>
+    <table>
+      <tr><th>Model</th><th>Conf</th><th>Tier</th></tr>
+      {% for d in rising %}
+      <tr>
+        <td><a href="/devices/{{ d.model_number }}">{{ d.model_number }}</a></td>
+        <td>{{ d.confidence }}</td>
+        <td>{{ d.product_tier or "—" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">Empty</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+<p class="muted">Generated {{ now }} UTC</p>
+{% endblock %}

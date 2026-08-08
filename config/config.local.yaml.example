@@ -1,0 +1,23 @@
+# Operator-local configuration overlay.
+#
+# Copy this file to config/config.local.yaml (NOT tracked by version control,
+# see .gitignore) to override values from config/config.yaml on this machine
+# only. It is deep-merged on top of config.yaml at load time, so you only
+# need to list the keys you're changing — no need to repeat the whole file.
+#
+# Re-extracting/upgrading the repository only ever touches tracked files
+# (config/config.yaml). config.local.yaml is never part of that archive, so
+# local production-scope decisions survive an upgrade instead of being
+# silently reverted to the tracked defaults.
+#
+# Example — enabling a second validated Samsung source locally:
+#
+# collectors:
+#   samsung_support:
+#     enabled: true
+#
+# Example — opting out of the Samsung-only production scope lock entirely
+# (NOT recommended without corresponding entries in production_scope()):
+#
+# production:
+#   samsung_only: true

@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(ls -la \"/c/Users/anil/Desktop/smartphone-clank\")"
-    ]
-  }
-}

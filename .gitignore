@@ -21,3 +21,6 @@ __pycache__/
 
 # Windows executables (defensive)
 *.exe
+
+# Local AI-tool config, not project content
+.claude/

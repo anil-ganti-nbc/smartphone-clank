@@ -1,5 +1,7 @@
 # Smartphone Intel Clank v0.2 — Evidence Engine
 
+> Status: Experimental / under construction
+
 **From model numbers to intelligence.**
 
 v0.1 built the sensors.  

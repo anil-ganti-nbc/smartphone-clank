@@ -80,13 +80,23 @@ class Settings(BaseSettings):
             self.local_config_loaded = None
 
         # Discord webhooks from env take precedence — two independent channels.
-        env_webhook = os.getenv("DISCORD_WEBHOOK_URL")
-        if env_webhook:
-            self.raw.setdefault("discord", {})["webhook_url"] = env_webhook
+        # Staging is hard-isolated: it only ever reads STAGING_DISCORD_WEBHOOK_URL,
+        # never DISCORD_WEBHOOK_URL / MAINTENANCE_DISCORD_WEBHOOK_URL. This means a
+        # production webhook set in the shared environment can never leak a Wave 1
+        # baseline-import or candidate-rejection message into the real newsroom.
+        if self.environment == "staging":
+            env_staging_webhook = os.getenv("STAGING_DISCORD_WEBHOOK_URL")
+            if env_staging_webhook:
+                self.raw.setdefault("discord", {})["webhook_url"] = env_staging_webhook
+                self.raw.setdefault("discord", {})["maintenance_webhook_url"] = env_staging_webhook
+        else:
+            env_webhook = os.getenv("DISCORD_WEBHOOK_URL")
+            if env_webhook:
+                self.raw.setdefault("discord", {})["webhook_url"] = env_webhook
 
-        env_maintenance_webhook = os.getenv("MAINTENANCE_DISCORD_WEBHOOK_URL")
-        if env_maintenance_webhook:
-            self.raw.setdefault("discord", {})["maintenance_webhook_url"] = env_maintenance_webhook
+            env_maintenance_webhook = os.getenv("MAINTENANCE_DISCORD_WEBHOOK_URL")
+            if env_maintenance_webhook:
+                self.raw.setdefault("discord", {})["maintenance_webhook_url"] = env_maintenance_webhook
 
         return self
 
@@ -116,6 +126,10 @@ class Settings(BaseSettings):
                 return default
             node = node[key]
         return node
+
+    @property
+    def environment(self) -> str:
+        return str(self.get("environment", default="production") or "production")
 
     @property
     def database_url(self) -> str:

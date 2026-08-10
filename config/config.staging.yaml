@@ -1,0 +1,102 @@
+# Smartphone Intel Clank — STAGING environment
+#
+# Isolated from config/config.yaml (production). Never share a database file,
+# a Discord webhook, or a validation status between the two.
+#
+# Invoke with:  python main.py --environment staging run --once
+
+environment: staging
+
+database:
+  url: "sqlite:///./data/clank-staging.db"
+  echo: false
+
+discord:
+  # Staging never uses the production newsroom/maintenance webhooks even if
+  # DISCORD_WEBHOOK_URL is set in the environment — see config/settings.py
+  # Settings.load(): in staging mode only STAGING_DISCORD_WEBHOOK_URL is read.
+  webhook_url: ""
+  maintenance_webhook_url: ""
+  enabled: true
+  min_confidence_for_alert: 20
+  significant_confidence_delta: 15
+
+logging:
+  level: INFO
+  file: "logs/clank-staging.log"
+  max_bytes: 10485760
+  backup_count: 5
+
+manufacturers:
+  - samsung
+  - google
+  - oneplus
+  - nothing
+  - xiaomi
+
+confidence_weights:
+  support_page: 10
+  certification: 20
+  firmware: 25
+  ota: 20
+  retail_listing: 35
+  official_announcement: 100
+
+# Production collector registry (collectors/__init__.py::build_collectors) is
+# NOT used in staging. Wave 1 candidate collectors are registered separately
+# via collectors/wave1/__init__.py::build_wave1_collectors(), gated on
+# environment == "staging" at the call site in main.py. This block only
+# controls per-OEM staging toggles for that separate registry.
+wave1:
+  google:
+    enabled: true
+    max_fetches_per_run: 20
+  oneplus:
+    enabled: true
+    max_fetches_per_run: 20
+  nothing:
+    enabled: true
+    max_fetches_per_run: 20
+  xiaomi:
+    enabled: true
+    max_fetches_per_run: 20
+
+production:
+  samsung_only: true
+
+http:
+  user_agent: "SmartphoneIntelClank-Staging/0.1 (research; respectful crawler; contact: local)"
+  default_timeout: 30
+  max_concurrent: 2
+  respect_robots: true
+  min_delay_seconds: 1.5
+  cache_ttl_hours: 6
+
+entity_resolution:
+  exact_match_boost: 50
+  prefix_match_min_length: 6
+  regional_suffixes:
+    - B
+    - U
+    - N
+    - W
+    - 0
+    - E
+    - J
+    - Z
+
+intelligence:
+  knowledge_data_dir: "knowledge/data"
+  apply_decay_on_resolve: true
+  decay_schedule:
+    - [30, 0.90]
+    - [90, 0.75]
+    - [180, 0.50]
+    - [365, 0.30]
+  never_decay_source_types:
+    - official
+  change_detection:
+    alert_on_meaningful_only: true
+
+snapshots:
+  max_per_url: 20

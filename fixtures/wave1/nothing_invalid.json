@@ -1,0 +1,19 @@
+[
+  {"text": "Phone (1) Case", "reason": "known_accessory"},
+  {"text": "Phone (2) Clear Case", "reason": "known_accessory"},
+  {"text": "Nothing Ear", "reason": "audio_product"},
+  {"text": "Nothing Ear (a)", "reason": "audio_product"},
+  {"text": "Nothing Ear (stick)", "reason": "audio_product"},
+  {"text": "45W Fast Charger", "reason": "charger"},
+  {"text": "Nothing OS 3.0", "reason": "software_name"},
+  {"text": "Phone", "reason": "family_name_without_model"},
+  {"text": "Nothing", "reason": "family_name_without_model"},
+  {"text": "Shop the collection", "reason": "navigation_text"},
+  {"text": "We use cookies to personalize content and ads", "reason": "cookie_text"},
+  {"text": "Get 10% off your first order when you sign up", "reason": "promotion_text"},
+  {"text": "Nothing Phone is designed to be seen, not hidden, with our signature Glyph Interface", "reason": "contains_sentence"},
+  {"text": "Spigen Ultra Hybrid Case for Phone (3)", "reason": "known_accessory"},
+  {"text": "CMF Buds Pro 2", "reason": "audio_product"},
+  {"text": "CMF Watch Pro 2", "reason": "watch_not_phone"},
+  {"text": "", "reason": "empty_field"}
+]

@@ -1,0 +1,18 @@
+[
+  {"text": "PIXEL 11 SERIES AND RECEIVE AN EXCLUSIVE OFFER WHEN YOU TRADE IN YOUR CURRENT PHONE", "reason": "marketing_text"},
+  {"text": "Pixel phones docked in a row on a wooden table with morning light", "reason": "marketing_text"},
+  {"text": "Buy Pixel and get a free case", "reason": "promotion_text"},
+  {"text": "Compare all Pixel phones side by side", "reason": "navigation_text"},
+  {"text": "Skip to main content", "reason": "navigation_text"},
+  {"text": "We use cookies to improve your experience on this site", "reason": "cookie_text"},
+  {"text": "Pixel Watch 3", "reason": "watch_not_phone"},
+  {"text": "Pixel Tablet", "reason": "tablet_not_phone"},
+  {"text": "Pixel Buds Pro 2", "reason": "audio_product"},
+  {"text": "Pixel 45W USB-C Charger", "reason": "charger"},
+  {"text": "Pixel 9 Pro Case", "reason": "known_accessory"},
+  {"text": "Android 15", "reason": "software_name"},
+  {"text": "Pixel", "reason": "family_name_without_model"},
+  {"text": "Pixel phones are built to be helpful, so you can focus on what matters most to you every single day", "reason": "contains_sentence"},
+  {"text": "PIXEL PIXEL PIXEL PIXEL PIXEL PIXEL PIXEL PIXEL PIXEL PIXEL PIXEL PIXEL PIXEL PIXEL PIXEL", "reason": "too_long"},
+  {"text": "", "reason": "empty_field"}
+]

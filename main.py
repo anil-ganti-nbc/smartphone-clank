@@ -23,6 +23,30 @@ from database.session import get_session_factory, init_db, session_scope
 from database.models import Device, CollectorRun, TimelineEvent, Alias, DeviceFamily, HistoricalStat
 from pipeline import IntelligencePipeline
 from collectors import build_collectors
+from runtime.environment import (
+    PRODUCTION,
+    STAGING,
+    Banner,
+    assert_db_matches_environment,
+    assert_safe_to_destroy,
+)
+
+
+def _resolve_config_path(config: str, environment: str) -> str:
+    """--environment staging with the default config path switches to config.staging.yaml."""
+    if environment == STAGING and config == "config/config.yaml":
+        return "config/config.staging.yaml"
+    return config
+
+
+def _load_environment(config: str, environment: str):
+    """Load settings for (config, environment), print the banner, and enforce
+    the DB/environment safety guard before anything touches the database."""
+    resolved_config = _resolve_config_path(config, environment)
+    settings = load_settings(resolved_config)
+    assert_db_matches_environment(settings.database_url, environment)
+    console.print(Banner(environment, settings.database_url, resolved_config).render())
+    return settings
 
 app = typer.Typer(help="Smartphone Intel Clank — Evidence Engine — smartphone intelligence")
 console = Console()
@@ -47,9 +71,12 @@ def setup_logging(level: str = "INFO", log_file: str = "logs/clank.log"):
 
 
 @app.command()
-def init(config: str = typer.Option("config/config.yaml", help="Path to config YAML")):
+def init(
+    config: str = typer.Option("config/config.yaml", help="Path to config YAML"),
+    environment: str = typer.Option(PRODUCTION, "--environment", help="production | staging"),
+):
     """Initialize database and verify configuration."""
-    settings = load_settings(config)
+    settings = _load_environment(config, environment)
     setup_logging(settings.get("logging", "level", default="INFO"))
     init_db(settings.database_url, echo=settings.get("database", "echo", default=False))
     console.print("[green]Database initialized.[/green]")
@@ -58,15 +85,22 @@ def init(config: str = typer.Option("config/config.yaml", help="Path to config Y
     console.print(f"Enabled collectors: {len(collectors)}")
     for c in collectors:
         console.print(f"  • {c.name}")
+    if environment == STAGING:
+        from collectors.wave1 import build_wave1_collectors
+        wave1 = build_wave1_collectors(settings)
+        console.print(f"Wave 1 (staging-only) collectors: {len(wave1)}")
+        for c in wave1:
+            console.print(f"  • {c.manufacturer}/{c.source_name} [{c.validation_state}]")
 
 
 @app.command()
 def run(
     config: str = typer.Option("config/config.yaml", help="Path to config YAML"),
     once: bool = typer.Option(False, "--once", help="Run all collectors once and exit"),
+    environment: str = typer.Option(PRODUCTION, "--environment", help="production | staging"),
 ):
     """Start the intelligence pipeline (scheduled or one-shot)."""
-    settings = load_settings(config)
+    settings = _load_environment(config, environment)
     setup_logging(settings.get("logging", "level", default="INFO"))
     init_db(settings.database_url)
     session_factory = get_session_factory(settings.database_url)
@@ -75,8 +109,15 @@ def run(
     if once:
         console.print("[bold]Running one-shot collection…[/bold]")
         pipeline.run_once()
+        if environment == STAGING:
+            from collectors.wave1 import run_wave1_once
+            run_wave1_once(settings, session_factory)
         console.print("[green]Done.[/green]")
         return
+
+    if environment == STAGING:
+        console.print("[red]Scheduled daemon mode is production-only. Use --once for staging runs.[/red]")
+        raise typer.Exit(1)
 
     # Production scheduled mode — delegate to runtime.daemon
     # (startup jobs, Python-owned logs, registry-driven collectors)
@@ -86,6 +127,28 @@ def run(
         console.print(f"  • {row['collector_id']} ({row['capability']}) [{row['validation_status']}]")
     from runtime.daemon import main as daemon_main
     raise typer.Exit(daemon_main())
+
+
+@app.command("reset-staging")
+def reset_staging(
+    config: str = typer.Option("config/config.staging.yaml", help="Path to staging config YAML"),
+    confirm: bool = typer.Option(False, "--yes", help="Actually delete the staging database"),
+):
+    """Destructive reset of the STAGING database only. Refuses anything that isn't a staging path."""
+    settings = load_settings(config)
+    assert_safe_to_destroy(settings.database_url)
+    db_path = Path(settings.database_url.replace("sqlite:///", ""))
+    console.print(Banner(STAGING, settings.database_url, config).render())
+    if not confirm:
+        console.print(f"[yellow]Dry run — pass --yes to actually delete {db_path}[/yellow]")
+        raise typer.Exit(0)
+    if db_path.exists():
+        db_path.unlink()
+        console.print(f"[green]Deleted {db_path}[/green]")
+    else:
+        console.print(f"[yellow]{db_path} did not exist[/yellow]")
+    init_db(settings.database_url)
+    console.print("[green]Staging database re-initialized empty.[/green]")
 
 
 @app.command()

@@ -1,0 +1,18 @@
+[
+  {"text": "ONEPLUSSHOP", "reason": "navigation_text"},
+  {"text": "OnePlus Shop the latest deals now", "reason": "promotion_text"},
+  {"text": "Never Settle. Discover the OnePlus 13 today", "reason": "marketing_text"},
+  {"text": "Sign up for OnePlus newsletter and get exclusive offers", "reason": "promotion_text"},
+  {"text": "This website uses cookies to enhance your browsing experience", "reason": "cookie_text"},
+  {"text": "OnePlus Watch 2", "reason": "watch_not_phone"},
+  {"text": "OnePlus Pad 2", "reason": "tablet_not_phone"},
+  {"text": "OnePlus Buds Pro 3", "reason": "audio_product"},
+  {"text": "OnePlus SUPERVOOC Charger 100W", "reason": "charger"},
+  {"text": "OnePlus 12 Sandstone Bumper Case", "reason": "known_accessory"},
+  {"text": "OxygenOS 15", "reason": "software_name"},
+  {"text": "OnePlus", "reason": "family_name_without_model"},
+  {"text": "CPH", "reason": "invalid_length"},
+  {"text": "CPH240099999999", "reason": "invalid_length"},
+  {"text": "Experience blazing fast charging and a smooth 120Hz display built for speed", "reason": "contains_sentence"},
+  {"text": "", "reason": "empty_field"}
+]

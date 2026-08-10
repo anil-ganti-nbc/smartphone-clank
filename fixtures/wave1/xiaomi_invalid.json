@@ -1,0 +1,19 @@
+[
+  {"text": "Redmi Note 13 Series Case", "reason": "known_accessory"},
+  {"text": "Mi Smart Band 9", "reason": "not_a_phone"},
+  {"text": "Xiaomi Pad 6", "reason": "tablet_not_phone"},
+  {"text": "Redmi Watch 5", "reason": "watch_not_phone"},
+  {"text": "Xiaomi Buds 5", "reason": "audio_product"},
+  {"text": "120W HyperCharge Combo", "reason": "charger"},
+  {"text": "HyperOS 2.0", "reason": "software_name"},
+  {"text": "Redmi", "reason": "family_name_without_model"},
+  {"text": "POCO", "reason": "family_name_without_model"},
+  {"text": "Xiaomi", "reason": "family_name_without_model"},
+  {"text": "Shop now and save big on Redmi Note series", "reason": "promotion_text"},
+  {"text": "This site uses cookies. By continuing to browse you agree to our use of cookies", "reason": "cookie_text"},
+  {"text": "Explore the full Redmi lineup", "reason": "navigation_text"},
+  {"text": "Redmi Note 13 Pro brings flagship-level performance with a stunning curved display designed for everyone", "reason": "contains_sentence"},
+  {"text": "M", "reason": "invalid_length"},
+  {"text": "M2007J3SY0000000000000000000000EXTRA", "reason": "too_long"},
+  {"text": "", "reason": "empty_field"}
+]

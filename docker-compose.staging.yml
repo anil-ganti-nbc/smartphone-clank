@@ -1,0 +1,25 @@
+# Smartphone Clank -- STAGING / SOAK ONLY. Under construction. No production
+# compose file exists for this clank. Isolated named volume, no ports
+# published, no Docker socket mounted, restart disabled, one-shot default
+# command (runtime/run_once.py -- see docs/SCHEDULER_MIGRATION.md for why
+# this replaces the prior BlockingScheduler daemon).
+services:
+  smartphone-clank:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GIT_REVISION: ${GIT_REVISION:-unknown}
+    image: smartphone-clank:${IMAGE_TAG:-soak-local}
+    container_name: smartphone-clank-soak
+    restart: "no"
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      MAINTENANCE_DISCORD_WEBHOOK_URL: ${MAINTENANCE_DISCORD_WEBHOOK_URL:-}
+      CLANK_LOG_LEVEL: ${CLANK_LOG_LEVEL:-INFO}
+    volumes:
+      - smartphone_clank_staging_data:/app/data
+
+volumes:
+  smartphone_clank_staging_data:
+    name: smartphone_clank_staging_data

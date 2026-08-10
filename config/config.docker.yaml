@@ -1,0 +1,12 @@
+# Docker/Hetzner overlay -- deep-merged on top of config.yaml via the
+# existing, already-working CLANK_LOCAL_CONFIG mechanism (config/settings.py
+# already reads this env var; nothing in settings.py was changed to add
+# this). Points the database at the container's mounted persistent volume
+# instead of the repo-relative default, which would otherwise resolve
+# inside the (disposable) container filesystem.
+#
+# This is the only key overridden here -- collector scope, production
+# allowlist, confidence weights, and every other setting still come from
+# the tracked config.yaml, unchanged.
+database:
+  url: "sqlite:////app/data/clank.db"

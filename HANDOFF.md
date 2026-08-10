@@ -848,27 +848,35 @@ modify it.
 
 ## 13. Hetzner / NAS
 
-**Verified 2026-08-11 — see `docs/infra/HETZNER_SOAK_COMMISSIONING.md` for
-full detail. Verdict: `MIGRATION_INCOMPLETE`.** No Hetzner deployment
-actually exists (only Tier D architecture-prep and an unbuilt
-Docker/Compose scaffold) — Windows remains the sole production host,
-unambiguously and correctly.
+**MIGRATED, 2026-08-10/11 — see `docs/infra/HETZNER_SOAK_COMMISSIONING.md`
+for full detail. Verdict: `HETZNER_SOAK_COMMISSIONED`.**
 
-**GitHub recoverability gap closed, 2026-08-11.** The blocker above (current
-production source existing only as uncommitted working-tree state) is
-fixed: commit `6d3e333` on `feature/wave1-expansion`
-(https://github.com/anil-ganti-nbc/smartphone-clank), tag
-`soak-baseline-2026-08-11`, both pushed and independently verified reachable
-via the GitHub API. `production validate` and the canonical suite (181/181)
-were re-run clean after the commit. Actual Hetzner deployment is separate,
-deliberately-scoped future work — not started by this checkpoint. Original
-note preserved below for history:
-
-Prior blocker (now resolved, see above): **current production source
-(everything past Wave 1's initial commit — Motorola through Realme, alert
-semantics, the IST test fix) is not committed/pushed to GitHub**, only
-present as uncommitted working-tree state
-on this machine. No NAS work done or planned this phase.
+- **Hetzner is now authoritative production.** Windows is stopped (daemon
+  cleanly shut down; dashboard left running, read-only, as rollback
+  material) and not scheduled to restart.
+- Host: `root@204.168.142.1` (key `hetzner_clank_fleet`), deployed at
+  `/opt/smartphone-clank`, dedicated `smartphone-clank` system user, venv +
+  systemd (`smartphone-clank.service` + `-dashboard.service` +
+  `-backup.service`/`.timer`) — no Docker.
+- Deployed Git SHA: **`83630c4`** on `feature/wave1-expansion` (two real
+  GitHub-recoverability bugs found and fixed en route: missing `alembic` in
+  `requirements.txt`, and `knowledge/data/` silently gitignored — both
+  committed before deployment, both synced back to the Windows trees).
+- Production DB migrated via SQLite backup-API snapshot, SHA-256-verified
+  identical source/destination, zero data loss: 261 devices / 277 evidence
+  / 129 alerts, unchanged through cutover.
+- Canonical suite on Hetzner: **181 passed, 0 failed**, matching Windows
+  exactly.
+- **Soak start: `2026-08-10T20:39:49 UTC` / `2026-08-11 02:09:49 IST`** —
+  supersedes the 2026-08-11 Windows-freeze timestamp in §12e (that was the
+  8-OEM expansion freeze, not the cloud soak). Recommended window: 7 days,
+  ending 2026-08-17.
+- Rollback plan documented (not executed — system healthy); Windows
+  tree/DB/backups left fully intact for that purpose.
+- Residual risks: host-level reboot persistence unproven (shared fleet host,
+  reboot judged unsafe — service-level restart proven instead); backups are
+  single-host, no off-host/NAS copy yet (explicitly out of scope this
+  phase).
 
 ## 14. August 2026 contamination incident — permanent regression protection
 

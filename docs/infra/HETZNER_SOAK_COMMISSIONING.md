@@ -1,229 +1,304 @@
-# Hetzner Soak Commissioning — Verification Report
+# Hetzner Soak Commissioning — Executed Migration Report
 
-**Date: 2026-08-11. Verdict: `MIGRATION_INCOMPLETE`.**
+**Date: 2026-08-10/11. Verdict: `HETZNER_SOAK_COMMISSIONED`.**
 
-This document verifies (or refutes) the claim that Smartphone Intel Clank's
-8-OEM production system has been migrated to Hetzner. It does not perform
-new migration work — per the mission's own framing, "if migration has
-already occurred, VERIFY it." The finding below is that it has not.
+Supersedes the 2026-08-11 verification-only version of this document
+(preserved below in §Appendix), which found `MIGRATION_INCOMPLETE` because
+no Hetzner deployment existed yet — only Tier D architecture-prep and an
+unbuilt Docker/Compose scaffold. This document records the actual executed
+migration that followed the GitHub checkpoint (`soak-baseline-2026-08-11`).
 
-## Executive summary
+## Host
 
-There is no live Hetzner production deployment to verify. What exists is
-**Tier D architecture-prep work** (`ai/handoff/CLOUD_READINESS_CHECKLIST.md`,
-explicitly scoped as "planning artifacts, not working infrastructure") plus
-a later **scheduler-migration design** (`docs/SCHEDULER_MIGRATION.md`) that
-added a `Dockerfile`/`docker-compose.staging.yml` and a `runtime/run_once.py`
-one-shot entry point. Neither phase deployed anything to an actual remote
-Hetzner server reachable from this session:
+`root@204.168.142.1` (SSH key `hetzner_clank_fleet`), Hetzner Helsinki,
+hostname `ubuntu-4gb-hel1-1`, Ubuntu 24.04.4 LTS, kernel 6.8.0-137-generic,
+4GB RAM, 38GB disk (29GB free before deployment). Timezone `Etc/UTC`. This
+is a **shared multi-project fleet host** — it already runs
+korean-tech-wire, oem-radar, free-game-tracker, feature-phone-clank,
+smartwatch-clank, watch-clank, semiconductor-intelligence, and
+chinese-tech-wire, each isolated under its own system user or the shared
+`deploy` user. Smartphone Clank now follows the more production-grade of
+the two existing conventions on this host (dedicated system user under
+`/opt/`, matching `korean-tech-wire`) rather than the `deploy`-user
+"experimental" pattern.
 
-- No SSH config, host address, or credential reference to a Hetzner machine
-  exists anywhere in the repository (`~/.ssh/config` does not exist; no
-  script, doc, or config file names an IP/hostname).
-- `docs/SCHEDULER_MIGRATION.md` cites `ai/handoff/HETZNER_DEPLOYMENT.md` as
-  the source for its `flock` overlap-test proof — **that file does not
-  exist** in the repository. The claim is unverifiable and the referenced
-  evidence is missing.
-- No Docker images, containers, or volumes for this project exist on this
-  machine (`docker images` / `docker ps -a` / `docker volume ls`, all
-  filtered for `clank`, return empty) — so even the local Docker Compose
-  path described in that doc is not currently running or built here.
-- `docker-compose.staging.yml` itself documents that its target is a
-  **fresh, isolated named volume** (`smartphone_clank_staging_data`), not
-  the Windows production database — by design, per its own comment: "the
-  Windows local database was not copied... not a promotion of existing
-  production state." Even if that container had been run at some point, it
-  was never the authoritative production database.
+**Pre-existing artifact found and accounted for**: `/home/deploy/staging/smartphone-clank`,
+a Docker-based staging deployment from the earlier Tier D/scheduler-migration
+work, built from `.deployed-id` = `1b0a183` (`origin/main`'s old
+cloud-migration-oneshot lineage — confirmed to predate all Wave 1/2 OEM
+work, consistent with the verification-only report's finding). It ran
+hourly via a `deploy` crontab entry against an **isolated fresh Docker
+volume**, never production data. That cron entry has been commented out
+(not deleted) to avoid confusion/log noise alongside the real production
+service; the staging tree and Docker volume/image are left in place,
+untouched.
 
-**There is exactly one production system today, and it runs on Windows.**
+## Deployment model
 
-## 1. The two hosts, as they actually stand
+Git checkout + Python venv + systemd, per the mission's explicit preference
+and matching `korean-tech-wire`'s existing convention. **No Docker was
+introduced** despite the pre-existing `docker-compose.staging.yml` scaffold
+— it remains exactly what it was (staging-only, untouched).
 
-### WINDOWS (`smartphone-clank-prod`) — the only production host
-
-| Property | Value |
+| Item | Value |
 |---|---|
-| Tree path | `C:\Users\anil\Desktop\smartphone-clank-prod` |
-| Git branch | `feature/wave1-expansion` |
-| Git HEAD | `ddfc2a36b2d043bf0a3303093d96e495483520ce` |
-| Working-tree status | **Dirty** — 19 tracked files modified relative to that commit (1757 insertions / 284 deletions across `alerts/`, `collectors/wave1/`, `dashboard/`, `database/`, `main.py`, `pipeline.py`, `runtime/`, `config/`, `scripts/windows/`, `HANDOFF.md`, `tests/test_metrics.py`) plus one untracked file (`PRODUCTION_TREE.txt`) |
-| Python version | 3.14.6 (`.venv`, no `pytest` installed — documented gap, see §18) |
-| venv path | `.venv\Scripts\python.exe` |
-| Database path | `data/clank.db` |
-| Database size | 1,826,816 bytes (as of 2026-08-11 01:12) |
-| Schema revision | `0007_wave1_baseline_state` (== head) |
-| Production config source | `config/config.yaml` (this tree, file-copied from dev, not git-tracked as a deploy step) |
-| `.env` location | `smartphone-clank-prod/.env` (present, git-ignored) |
-| Runtime mechanism | `runtime/daemon.py` (`BlockingScheduler`), launched via Windows Task Scheduler / `scripts/windows/start-runtime.ps1` |
-| Scheduler mechanism | In-process APScheduler, per-collector `interval_minutes` from `config.yaml` |
-| Dashboard mechanism | `dashboard/app.py`, started via `start-dashboard.ps1` |
-| Backup mechanism | `scripts/windows/backup-database.ps1` + ad hoc `cp` before risky operations, into `data/backups/` |
+| Application path | `/opt/smartphone-clank` |
+| System user | `smartphone-clank` (dedicated, `nologin`, uid 996) |
+| venv | `/opt/smartphone-clank/.venv` (Python 3.12.3) |
+| Production DB | `/opt/smartphone-clank/data/clank.db` |
+| Secrets | `/opt/smartphone-clank/.env` (mode 600, owned by `smartphone-clank`, git-ignored) |
+| Backups | `/opt/smartphone-clank/data/backups/` (14-day bounded retention) |
+| Logs | `journalctl -u smartphone-clank.service` / `-u smartphone-clank-dashboard.service` (systemd-managed, bounded — 43.5M on-disk before this deployment, no custom logging built) |
+| systemd units | `smartphone-clank.service` (daemon), `smartphone-clank-dashboard.service` (dashboard), `smartphone-clank-backup.service`+`.timer` (daily 02:30 UTC backup) |
+| Restart policy | `Restart=on-failure`, `RestartSec=30` |
 
-### HETZNER — not a production host; not verifiably running anything
+## Deployed source
 
-| Property | Value |
-|---|---|
-| Repository/tree path | **Unknown — no path, host, or credential is documented anywhere in this repo or this machine's SSH config.** |
-| Deployment artifacts that exist | `Dockerfile`, `docker-compose.staging.yml` (promoted from `.draft` per `docs/SCHEDULER_MIGRATION.md`, 2026-08-10) |
-| Actually built/run anywhere reachable from this session | **No** — zero local Docker images/containers/volumes for this project |
-| Database | N/A — compose file targets an isolated fresh named volume, never the production DB, by explicit design |
-| Runtime mechanism (as designed, not deployed) | `runtime/run_once.py`, intended to be triggered externally (cron/systemd timer + `flock`) per `docs/SCHEDULER_MIGRATION.md` |
-| `.env`/webhook credentials | not_configured (no environment or secret material for a Hetzner host exists here to check) |
+Cloned `feature/wave1-expansion` from GitHub (not copied from the mutable
+Windows tree). Final deployed SHA: **`83630c4`**.
 
-## 2. Which host is actually production
+Two real, previously-invisible bugs were found and fixed during this phase
+— both **committed to GitHub first**, deployed only after, per the
+mission's explicit rule against uncommitted Hetzner-only patches:
 
-Empirically, not by assumption:
+1. **`requirements.txt` never declared `alembic`** (Windows had it installed
+   out-of-band since schema-authority work landed). A fresh Linux checkout
+   failed `tests/wave1/test_schema_authority.py` at collection. Fixed in
+   commit `46f356b`.
+2. **`.gitignore`'s unanchored `data/` rule also matched `knowledge/data/`**,
+   silently excluding tracked reference YAML (`manufacturers.yaml`,
+   `codenames.yaml`, `samsung_model_rules.yaml`) from every commit made so
+   far. A fresh checkout was missing static rules data that Samsung
+   category classification and knowledge enrichment depend on — surfaced as
+   7 test failures (`test_samsung_v03.py`, `test_knowledge.py`) that never
+   failed on Windows because the untracked local copy was always present
+   there. Fixed in commit `83630c4` (anchored to `/data/`, added the 3
+   files).
 
-- **Windows daemon**: running. PIDs 43276 (daemon) + 39304 (child), and
-  45356 (dashboard) + 41392 (child), all under
-  `smartphone-clank-prod\.venv\Scripts\python.exe` — confirmed via process
-  inspection.
-- **Hetzner daemon**: not applicable — no reachable host exists to check.
-- **DB receiving current `collector_run`/device rows**: `smartphone-clank-prod\data\clank.db` only — verified via `PRAGMA integrity_check` = `ok`, live counts below.
-- **Scheduled execution owner**: Windows Task Scheduler, targeting the `-prod` tree exclusively (per `docs/infra/ISOLATION_AUDIT.md`, unchanged this check).
-- **Could both hosts currently be collecting?** No — there is no second live collector process anywhere, on Windows or otherwise, against a divergent database. **No split-brain condition exists.**
+Both fixes were synced back to the Windows dev and frozen-prod trees to
+keep all three copies (dev, prod, Hetzner) byte-identical at the
+application-source level.
 
-## 3. Repository / revision verification
+## Canonical test suite
 
-This is the actual blocker, not a formality.
+**181 passed, 0 failed** on native Linux (Hetzner), exact match to Windows.
+(Two interim runs failed — 1 and then 7 tests — purely due to the two gaps
+above; both are now closed and the fix is permanent, not Hetzner-local.)
 
-- `origin/main` HEAD: `1b0a183` ("Merge pull request #1 from
-  anil-ganti-nbc/feature/cloud-migration-oneshot") — a **different lineage**
-  from the production code entirely; it does not contain Wave 1 or Wave 2
-  OEM work.
-- `origin/feature/wave1-expansion` HEAD: `ddfc2a3` ("Add Wave 1 candidate
-  OEM collectors (Google, OnePlus, Nothing, Xiaomi) behind a hard-isolated
-  staging environment") — this **is** pushed and matches the local
-  checked-out branch exactly. But it predates every promotion after that
-  point.
-- **Everything after that commit — Google/Nothing/OnePlus/Motorola/Honor/Oppo/Realme production promotion, the alert-semantics rewrite, the production-scope validator, the IST-midnight test fix, all of `HANDOFF.md`'s Wave 1/Wave 2 history — exists only as uncommitted working-tree modifications on both the dev and prod trees on this one Windows machine.** Confirmed identically on both trees (`git status --short`, `git diff --stat`).
-- Consequently: `PRODUCTION_OEM_SCOPE` with Honor/Oppo/Realme, the
-  production-scope validator, `dropped_out_of_scope` accounting, and the
-  deterministic daily-report fix are all real and running — but **not
-  recoverable from GitHub.** If this Windows machine were lost today, the
-  production system as it currently exists could not be reconstructed from
-  the remote.
+## Secrets
 
-**This is a confirmed BLOCKER per the mission's own Phase 17/20 criteria** — not a stylistic gap. `HETZNER_SOAK_COMMISSIONED` explicitly requires "GitHub contains recoverable source," which is false today.
+Newsroom webhook: **configured**. Maintenance webhook: **configured**.
+Transferred directly host-to-host over the SSH pipe (`grep ... | ssh ...
+"cat > ..."`) — values were never echoed into any command output or this
+session's visible transcript at any point.
 
-## 4–5. Database authority / migration verification
+## Database migration
 
-Not applicable as a migration step — there is nothing on the far side to migrate to. For the record, the authoritative production database's current state:
+Windows remained authoritative through two snapshot/verify cycles:
+
+1. **Validation snapshot** (while Windows daemon was still running, taken
+   via SQLite's backup API — not a raw file copy): SHA-256
+   `cf780aed6533746f87a36673739935436d1342efad67ece1a396dbdb4961bc3e`,
+   1,826,816 bytes. Transferred via `scp`, checksum re-verified identical on
+   arrival, `PRAGMA integrity_check` = `ok`, all invariants
+   (devices=261, evidence=277, collector_runs=132, webhook_deliveries=140,
+   rejected_candidates=1575, alerts=129, wave1_baseline_state=7, per-OEM
+   device counts) matched exactly. Used for the Phase 8 controlled
+   validation cycle only.
+2. **Final cutover snapshot** (taken immediately after the Windows daemon
+   was cleanly stopped): **identical SHA-256** to the validation snapshot
+   — proof zero writes occurred on Windows between the two snapshots.
+   Transferred, re-verified, installed as the live production DB.
+
+Schema revision on both sides: `0007_wave1_baseline_state` (== head).
+
+## Controlled validation cycle (pre-cutover)
+
+Ran the daemon's own real startup pass (all 8 collectors, staggered,
+5–160s apart — the actual production invocation mechanism, not a
+synthetic one-shot) against the validation snapshot, then stopped it
+cleanly with SIGTERM. Result, exactly as the mission predicted for a
+migrated existing DB: **pure resighting, not rediscovery**.
+
+| OEM | candidates | valid | new | updated | resighted | dropped_out_of_scope |
+|---|---|---|---|---|---|---|
+| samsung | 0 (traversal budget) | — | 0 | 0 | 0 | — |
+| google | 0 (consent-page redirect, transient) | — | 0 | 0 | 0 | 0 |
+| oneplus | 17 | 16 | 0 | 0 | 16 | 0 |
+| nothing | 22 | 21 | 0 | 0 | 21 | 0 |
+| motorola | 124 | 18 | 0 | 0 | 18 | 0 |
+| honor | 80 | 22 | 0 | 0 | 22 | 0 |
+| oppo | 99 | 73 | 0 | 0 | 73 | 0 |
+| realme | 52 | 22 | 0 | 0 | 22 | 0 |
+
+Zero new devices, zero updates, zero drops, zero alerts, zero pollution.
+DB afterward: still 261/277/129 (devices/evidence/alerts), integrity `ok`.
+
+## Pre-cutover comparison
+
+Windows (still live, unchanged) vs. Hetzner (post-validation-cycle):
+identical device counts per manufacturer, identical evidence/alert totals,
+**zero duplicate identities on either host** (`GROUP BY manufacturer,
+model_number HAVING COUNT(*) > 1` returns empty on both).
+
+## Authority cutover
+
+1. Windows had no `AtStartup` scheduled task for the runtime (install.ps1
+   defines `SmartphoneIntelClank-Runtime`, but it was never actually
+   registered — the daemon had been running as a manually-launched process
+   this whole engagement). Nothing to unregister; the running process was
+   the only thing to stop.
+2. Windows daemon (PID 43276) stopped via `scripts/windows/stop-runtime.ps1`
+   — graceful `CloseMainWindow()` timed out after 30s (expected for a
+   console app with no message loop), force-killed cleanly. DB integrity
+   `ok` immediately after (SQLite's atomic-commit guarantee; no in-flight
+   transaction was corrupted).
+3. Final snapshot taken, transferred, verified (see above), installed at
+   `/opt/smartphone-clank/data/clank.db`.
+4. `smartphone-clank.service` (systemd, `Type=simple`, long-lived
+   BlockingScheduler — the same in-process scheduler model Windows always
+   used; no scheduler redesign) started and `enable`d for boot persistence.
+5. `smartphone-clank-dashboard.service` commissioned separately, bound to
+   `127.0.0.1:8200` only (verified via `ss -tlnp` — not `0.0.0.0`), `/healthz`
+   returns `{"status":"ok","database":"ok"}`.
+
+**Windows production dashboard was left running** (read-only, no mutation
+path per the existing report/dashboard `create_all()` fix) as
+investigation/rollback material. The Windows daemon is stopped and not
+scheduled to restart.
+
+## Post-cutover validation
+
+- Exactly one `runtime.daemon` process at all times (verified via `pgrep`
+  after initial start and again after a restart-cycle test).
+- `production validate`: **PASS**, all 7 wave1 OEMs + Samsung, identical
+  output to Windows. Vivo/Xiaomi/Redmi/Poco/ASUS/Sony confirmed unable to
+  schedule (Xiaomi shown `approved=NO configured=YES adapter=YES
+  enabled=NO scheduled=NO status=OK`; the others don't even appear in the
+  registry).
+- Deployed SHA `83630c4` confirmed via `git rev-parse HEAD` in the running
+  service's `WorkingDirectory`.
+- Schema HEAD, DB integrity `ok`.
+- Manufacturer counts: google 7, honor 22, motorola 15, nothing 9, oneplus
+  16, oppo 73, realme 22, samsung 97 — **261 total, unchanged from Windows**.
+- Zero errors/exceptions/tracebacks across the full systemd journal for
+  both the initial startup pass and the restart-cycle test.
+- `alerts` table: 129 (unchanged) — zero new alerts fired during migration.
+- `webhook_deliveries`: 140 (unchanged).
+- `python main.py report daily` (existing observability, reused unchanged):
+  0 alert eligible/attempted/delivered/suppressed/failed, "Attention
+  required: None", 261/277/0 devices/evidence/snapshots.
+
+## Restart resilience (reboot substitute)
+
+A **full host reboot was deliberately not performed.** This host runs
+multiple other live projects (korean-tech-wire, oem-radar,
+free-game-tracker, and others via cron/systemd timers) — per the mission's
+own stop condition ("If the Hetzner machine hosts unrelated critical
+workloads that make reboot unsafe: do NOT reboot... document that reboot
+persistence remains unproven"), a kernel-level reboot was judged unsafe to
+this shared fleet.
+
+**What was proven instead**: both services are `systemctl enable`d
+(confirmed `is-enabled` = `enabled`, meaning they are wired into
+`multi-user.target` and will start on the next boot regardless of cause),
+and a live `systemctl restart` of both services was exercised — clean
+stop, clean start, new PID, exactly one process, DB integrity and counts
+unchanged (261/129), dashboard `/healthz` OK immediately after.
+**Reboot-specifically-triggered persistence remains formally unproven** —
+flagged as a residual risk below, not silently assumed.
+
+## Backups
+
+`smartphone-clank-backup.service`/`.timer` — daily 02:30 UTC (±5min
+jitter), reuses the project's own existing `main.py db backup` mechanism
+(the same one Windows has always used — no new backup implementation
+built), wrapped with SHA-256 checksumming and 14-day bounded retention.
+First run executed manually to prove it works: `clank_20260810_204535.db`,
+checksum recorded, `PRAGMA integrity_check` = `ok` on the backup file
+itself, 261 devices.
+
+**Residual risk, explicitly not solved here** (per the mission's own "do
+not invent NAS integration during this mission" instruction): backups live
+only on the same Hetzner disk as production. No off-host copy exists yet.
+
+## Rollback plan (documented, not executed — system is healthy)
+
+1. `systemctl stop smartphone-clank.service smartphone-clank-dashboard.service`
+   on Hetzner; `systemctl disable` both to prevent restart-on-reboot.
+2. Take a fresh SQLite-backup-API snapshot of `/opt/smartphone-clank/data/clank.db`,
+   `scp` it back to the Windows prod tree's `data/backups/`, verify SHA-256
+   and `PRAGMA integrity_check` on arrival.
+3. Restore that snapshot to `smartphone-clank-prod/data/clank.db` (after
+   backing up whatever is currently there, even though Windows was not
+   written to during the soak).
+4. Re-enable Windows: `scripts\windows\start-runtime.ps1` (and
+   `start-dashboard.ps1` if needed — it was never stopped).
+5. `python main.py production validate` on Windows — must show PASS before
+   considering Windows authoritative again.
+6. Confirm via process inspection that exactly one authority exists
+   (Hetzner's `smartphone-clank.service` disabled+stopped, Windows daemon
+   running).
+
+Not executed — the migration is healthy and this plan exists purely as
+insurance, per the mission's explicit "do not actually roll back a healthy
+migration merely to demonstrate it."
+
+## Soak start
+
+**Authoritative soak start: `2026-08-10T20:39:49 UTC` / `2026-08-11
+02:09:49 IST`** — the timestamp of `smartphone-clank.service`'s first
+`runtime entering scheduler loop` log line as the sole production
+authority, immediately after the Windows daemon was confirmed stopped and
+the final snapshot installed. This supersedes the earlier
+"2026-08-11 Windows 8-OEM freeze" timestamp recorded in `HANDOFF.md` §12e
+— that was the Windows expansion-freeze point, not the cloud soak start,
+per the migration mission's own explicit instruction to reset the mental
+soak clock.
+
+Recommended initial soak window: **7 days**, ending **2026-08-17**. During
+this window: no new OEMs, no Xiaomi work, no schema cleanup, no zero-row
+table deletion, no architectural refactor, no alert-policy experimentation.
+Only correctness/reliability fixes justified by observed soak failures.
+
+## Remaining loose ends, ranked by severity
+
+1. **Reboot-specifically-triggered persistence is unproven** (host-level
+   reboot was judged unsafe on this shared fleet host — see above).
+   Service-level restart is proven; kernel reboot is not.
+2. **Backups are single-host** — no off-host/NAS copy yet. Flagged, not
+   solved, per explicit scope instruction.
+3. **`.deployed-id` staging Docker artifact remains on disk** at
+   `/home/deploy/staging/smartphone-clank` (old `1b0a183` lineage, cron now
+   disabled but not removed) — harmless, but is dead weight an operator may
+   want to clean up in a future, separate housekeeping pass.
+4. **Google's collector returned 0 candidates** during both cutover cycles
+   due to a `consent.google.com` redirect chain (regional consent-wall
+   variance, not a code defect — flagged by the collector's own
+   `zero_candidates_despite_healthy_fetch` metric, exactly as designed).
+   Worth watching during the 7-day soak; not a migration blocker (Google's
+   own device catalogue in the migrated DB is untouched and correct).
+5. **Each production source was polled 3 times within ~15 minutes**
+   (validation cycle, cutover startup, restart-cycle test) — all
+   single-request sitemap fetches, not scraping loops, so not abusive, but
+   more than strictly necessary. Noted for future migrations: prefer
+   reusing one validation cycle as both the pre-cutover proof and the
+   soak-start cycle where possible.
+
+## Final verdict
 
 ```text
-PRAGMA integrity_check: ok
-Schema revision: 0007_wave1_baseline_state (== head)
-Devices by manufacturer:
-  google    7
-  honor    22
-  motorola 15
-  nothing   9
-  oneplus  16
-  oppo     73
-  realme   22
-  samsung  97
-  ---------------
-  total   261
-Total evidence rows: 277
+HETZNER_SOAK_COMMISSIONED
 ```
 
-This matches the fleet audit recorded at soak-start (`HANDOFF.md` §12e) exactly — no drift since 2026-08-11 01:18.
+---
 
-## 6. Configuration verification (Windows, the only live host)
+## Appendix: prior verification-only report (2026-08-11, superseded)
 
-`python main.py production validate` (prod tree):
-
-```text
-OEM        approved configured adapter enabled scheduled status
-google          YES        YES     YES     YES       YES OK
-honor           YES        YES     YES     YES       YES OK
-motorola        YES        YES     YES     YES       YES OK
-nothing         YES        YES     YES     YES       YES OK
-oneplus         YES        YES     YES     YES       YES OK
-oppo            YES        YES     YES     YES       YES OK
-realme          YES        YES     YES     YES       YES OK
-xiaomi           NO        YES     YES      NO        NO OK
-
-Production scope: OK — no mismatches
-```
-
-Exactly the intended 8 OEMs (Samsung via its own registry + the 7 above); Vivo/Xiaomi/Redmi/Poco/ASUS/Sony correctly absent or inert. **PASS.**
-
-## 7. Secrets / Discord
-
-Prod tree `.env` (values not printed, keys and presence only):
-
-```text
-newsroom webhook: configured
-maintenance webhook: configured
-```
-
-`.env` is `.gitignore`d in both trees (confirmed via `git check-ignore -v .env`) — never committed. No synthetic Discord test was sent; not necessary since transport was already exercised during the Oppo/Realme canaries.
-
-## 8–15. Linux runtime / scheduling / dashboard / logging / backups / health / first cloud cycle / reboot test
-
-**Not performed.** All of these presuppose a reachable Hetzner host. None exists to test against. Attempting to fabricate results for a server that isn't there would violate the mission's own evidentiary standard ("prove it," "establish current truth from the repository and both hosts" — the second host, as verified, does not currently exist in any checkable form).
-
-## 16. Windows decommission / standby
-
-**Not performed, correctly.** Per Phase 16's own logic, this step is
-conditional on Hetzner first being "proven authoritative." Since it isn't,
-Windows remains — correctly — the sole production runtime. No production
-scheduled task was disabled.
-
-## 17. GitHub loose end
-
-See §3. `origin/main` and `origin/feature/wave1-expansion` are both real,
-clean, pushed branches — but neither contains the current production
-system. This is flagged, not fixed, per the mission's explicit instruction
-not to rewrite history or invent a release process; committing/pushing the
-current working tree is a separate, deliberate decision for the operator to
-make (it touches `HANDOFF.md`, config, and 18 source files across two
-trees) and is not done automatically as part of this verification pass.
-
-## 18. Final test suite
-
-`smartphone-clank-prod\.venv` has no `pytest` installed — a pre-existing,
-already-documented gap (`ai/handoff/CLOUD_READINESS_BLOCKERS.md` item 5).
-Ran the canonical suite against the equivalent dev-tree working state
-(byte-identical source, same uncommitted diff, system-installed Python 3.14.6
-with pytest 8.4.2 on PATH):
-
-```text
-PYTHONPATH=. python -m pytest -q
-181 passed, 954 warnings in 43.35s
-```
-
-Matches the known-good baseline from the soak declaration exactly. **0 failed.**
-
-## 19. Residual risks
-
-1. **GitHub does not contain recoverable production source** (§3/§17) — the single most important finding of this verification. Recommended next action (operator decision, not performed here): commit the current working-tree state on both trees, push to a branch, open a PR into `main`, tag the soak-start revision.
-2. **No off-host backup exists** — `data/backups/` lives on the same Windows disk as `data/clank.db`. No NAS/off-host replication (explicitly out of scope, consistent with the mission's own §12 instruction not to build this here).
-3. **`ai/handoff/HETZNER_DEPLOYMENT.md` is a dangling reference** — `docs/SCHEDULER_MIGRATION.md` cites it as proof of a locking test that cannot currently be verified. Either the file was never committed or the claim needs to be re-substantiated before it's relied on.
-4. **No pytest in the production venv** — pre-existing, documented, low-impact (canonical suite is run from the dev tree/system Python by convention).
-
-## 20. Final verdict
-
-```text
-MIGRATION_INCOMPLETE
-```
-
-Windows is unambiguously the sole production system today: correct code
-(uncommitted, but present and running), correct database (261 devices, 277
-evidence rows, integrity ok, schema at head), `production validate` PASS,
-exactly one daemon and one dashboard, Discord configured, canonical suite
-green. No split-brain risk exists because there is nothing else running.
-The gap is entirely on the "has Hetzner migration happened" question: it
-has not — only architecture-prep and unbuilt deployment scaffolding exist
-for that host, and the current production source is not recoverable from
-GitHub. Recommend treating an actual Hetzner deployment as new,
-deliberately-scoped work with real target-host access, not something to be
-assumed already in progress.
-
-## 21. Freeze
-
-Per the mission's own terms, no new OEM/Vivo/Xiaomi/schema/GUI/AI/ranking
-work follows from this verification. The only follow-up this report
-recommends is the GitHub-recoverability gap in §3 — an operator decision,
-not undertaken here.
+The original `MIGRATION_INCOMPLETE` verification report (written before
+this migration was performed) is preserved in git history at commit
+`6d3e333` and `128601a` for reference. Its core finding — that no Hetzner
+deployment existed prior to this phase, and that GitHub did not contain
+recoverable production source — was accurate at the time and directly
+motivated the two-stage approach (GitHub checkpoint first, actual migration
+second) that produced this document.

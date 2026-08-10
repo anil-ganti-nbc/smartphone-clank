@@ -1,0 +1,88 @@
+# Samsung model validation & category rules — deterministic, no guessing
+
+series_prefixes:
+  SM-S:
+    category: smartphone
+    series_hint: "Galaxy S"
+    family_key_pattern: "SMS{digits}"
+  SM-A:
+    category: smartphone
+    series_hint: "Galaxy A"
+  SM-M:
+    category: smartphone
+    series_hint: "Galaxy M"
+  SM-F:
+    category: foldable
+    series_hint: "Galaxy Z"
+  SM-G:
+    category: smartphone
+    series_hint: "Galaxy S legacy"
+  SM-E:
+    category: smartphone
+    series_hint: "Galaxy F/E"
+  SM-C:
+    category: smartphone
+    series_hint: "Galaxy C"
+  SM-W:
+    category: smartphone
+    series_hint: "Galaxy W"
+  SM-X:
+    category: tablet
+    series_hint: "Galaxy Tab"
+  SM-T:
+    category: tablet
+    series_hint: "Galaxy Tab"
+  SM-R:
+    category: smartwatch
+    series_hint: "Galaxy Watch"
+  SM-L:
+    category: laptop
+    series_hint: "Galaxy Book"
+  SM-V:
+    category: unknown
+    series_hint: null
+
+# Primary regional / feature suffixes (heuristic)
+suffix_hints:
+  B: { region_hint: global_or_india, confidence: 0.7 }
+  U: { region_hint: usa, confidence: 0.75 }
+  U1: { region_hint: usa_unlocked, confidence: 0.7 }
+  N: { region_hint: korea, confidence: 0.75 }
+  W: { region_hint: canada, confidence: 0.7 }
+  "0": { region_hint: china, confidence: 0.6 }
+  E: { region_hint: europe_variant, confidence: 0.55 }
+  J: { region_hint: japan, confidence: 0.7 }
+  DS: { feature: dual_sim, confidence: 0.8 }
+  D: { feature: dual_sim, confidence: 0.5 }
+
+# Alert-eligible categories
+alert_categories:
+  - smartphone
+  - foldable
+  - tablet
+
+# Explicit exclusions (never alert)
+exclude_categories:
+  - laptop
+  - monitor
+  - television
+  - appliance
+  - accessory
+  - component
+  - smartwatch   # optional: enable later
+  - earbuds
+
+# Patterns that look like models but are not product SKUs
+reject_patterns:
+  - '(?i)^SM-[A-Z0-9]+BOOT'
+  - '(?i)^SM-[A-Z0-9]+ENG'
+  - '(?i)firmware'
+  - '(?i)^BUILD'
+
+# Canonical capture: SM- + letter series + digits + optional compound suffix
+canonical_regex: '(?i)^(SM-[SAGMFECTWXRVL][0-9]{2,4})([A-Z0-9]{0,10})$'
+
+validation_confidence:
+  exact_prefix_match: 0.95
+  weak_prefix: 0.6
+  rejected: 0.0

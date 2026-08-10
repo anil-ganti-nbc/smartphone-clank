@@ -1,0 +1,127 @@
+# Manufacturer Knowledge Base
+# Deterministic profiles only. Never invent. Unknown = null.
+
+samsung:
+  name: Samsung
+  typical_flagship_launch_month: 1          # January
+  typical_foldable_launch_month: 7          # July
+  typical_midrange_launch_months: [2, 3, 8, 9]
+  regional_suffixes:
+    B: global_or_india
+    U: usa
+    N: korea
+    W: canada
+    0: china
+    E: europe_variant
+    J: japan
+    Z: other
+  average_certification_lead_days_min: 30
+  average_certification_lead_days_max: 60
+  model_prefixes:
+    - SM-S    # Galaxy S series
+    - SM-F    # Fold / Flip
+    - SM-A    # A series
+    - SM-M    # M series
+    - SM-G    # older S / Note style
+  series_patterns:
+    - pattern: "^SM-S9[0-9]{2}"
+      family: "Galaxy S"
+      tier: flagship
+    - pattern: "^SM-S9[0-9]{2}B"
+      family: "Galaxy S"
+      tier: flagship
+      variant_hint: global
+    - pattern: "^SM-F9[0-9]{2}"
+      family: "Galaxy Z"
+      tier: flagship_foldable
+    - pattern: "^SM-A[0-9]{2}"
+      family: "Galaxy A"
+      tier: midrange
+    - pattern: "^SM-M[0-9]{2}"
+      family: "Galaxy M"
+      tier: budget
+
+google:
+  name: Google
+  typical_flagship_launch_month: 8          # August
+  typical_foldable_launch_month: 8
+  regional_suffixes: {}
+  average_certification_lead_days_min: 20
+  average_certification_lead_days_max: 45
+  model_prefixes:
+    - G
+    - Pixel
+  series_patterns:
+    - pattern: "(?i)pixel\\s?\\d+\\s?pro"
+      family: "Pixel"
+      tier: flagship
+    - pattern: "(?i)pixel\\s?\\d+a"
+      family: "Pixel"
+      tier: midrange
+    - pattern: "(?i)pixel\\s?fold"
+      family: "Pixel Fold"
+      tier: flagship_foldable
+    - pattern: "(?i)pixel\\s?\\d+"
+      family: "Pixel"
+      tier: flagship
+
+oneplus:
+  name: OnePlus
+  typical_flagship_launch_month: 1
+  regional_suffixes: {}
+  average_certification_lead_days_min: 25
+  average_certification_lead_days_max: 50
+  model_prefixes:
+    - CPH
+    - LE
+    - ONEPLUS
+  series_patterns:
+    - pattern: "(?i)oneplus\\s?\\d+\\s?pro"
+      family: "OnePlus"
+      tier: flagship
+    - pattern: "(?i)cph\\d{4}"
+      family: "OnePlus"
+      tier: null                  # unknown until more context
+
+nothing:
+  name: Nothing
+  typical_flagship_launch_month: 7
+  regional_suffixes: {}
+  average_certification_lead_days_min: 20
+  average_certification_lead_days_max: 40
+  model_prefixes:
+    - A0
+    - A1
+  series_patterns:
+    - pattern: "(?i)nothing\\s?phone\\s?\\(?\\d\\)?"
+      family: "Nothing Phone"
+      tier: midrange
+    - pattern: "^A0\\d{2}"
+      family: "Nothing Phone"
+      tier: midrange
+    - pattern: "^A1\\d{2}"
+      family: "Nothing Phone"
+      tier: midrange
+
+xiaomi:
+  name: Xiaomi
+  typical_flagship_launch_month: 3
+  typical_foldable_launch_month: 8
+  regional_suffixes: {}
+  average_certification_lead_days_min: 20
+  average_certification_lead_days_max: 50
+  model_prefixes:
+    - M
+    - 22
+    - Redmi
+    - POCO
+  series_patterns:
+    - pattern: "(?i)xiaomi\\s?\\d+[a-z]?\\s?pro"
+      family: "Xiaomi"
+      tier: flagship
+    - pattern: "(?i)redmi\\s?note"
+      family: "Redmi Note"
+      tier: midrange
+    - pattern: "(?i)poco\\s?f"
+      family: "POCO"
+      tier: midrange_performance

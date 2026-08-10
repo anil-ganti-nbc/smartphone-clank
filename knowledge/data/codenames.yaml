@@ -1,0 +1,20 @@
+# Known codename → model / marketing name mappings
+# Maintained manually. Only high-confidence entries.
+# Format: codename (lowercase) → list of known associations
+
+# Samsung examples (illustrative — keep real ones accurate)
+aurora:
+  manufacturer: samsung
+  possible_models: []
+  possible_marketing: []
+  notes: "Placeholder — add confirmed mappings only"
+
+# Google
+mustang:
+  manufacturer: google
+  possible_models: []
+  possible_marketing: ["Pixel"]
+  notes: "Historical example style — do not invent current mappings"
+
+# Keep this file sparse. Prefer null over wrong data.
+# Add entries only when confirmed from public evidence.

@@ -4,8 +4,9 @@ config/config.local.yaml
 # Secrets
 .env
 
-# Runtime data
-data/
+# Runtime data (root-level only — do not shadow knowledge/data/, which is
+# tracked reference YAML, not runtime state)
+/data/
 logs/
 runtime/backups/
 runtime/logs/

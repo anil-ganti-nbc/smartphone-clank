@@ -852,10 +852,22 @@ modify it.
 full detail. Verdict: `MIGRATION_INCOMPLETE`.** No Hetzner deployment
 actually exists (only Tier D architecture-prep and an unbuilt
 Docker/Compose scaffold) — Windows remains the sole production host,
-unambiguously and correctly. The confirmed blocker for a future migration
-attempt: **current production source (everything past Wave 1's initial
-commit — Motorola through Realme, alert semantics, the IST test fix) is not
-committed/pushed to GitHub**, only present as uncommitted working-tree state
+unambiguously and correctly.
+
+**GitHub recoverability gap closed, 2026-08-11.** The blocker above (current
+production source existing only as uncommitted working-tree state) is
+fixed: commit `6d3e333` on `feature/wave1-expansion`
+(https://github.com/anil-ganti-nbc/smartphone-clank), tag
+`soak-baseline-2026-08-11`, both pushed and independently verified reachable
+via the GitHub API. `production validate` and the canonical suite (181/181)
+were re-run clean after the commit. Actual Hetzner deployment is separate,
+deliberately-scoped future work — not started by this checkpoint. Original
+note preserved below for history:
+
+Prior blocker (now resolved, see above): **current production source
+(everything past Wave 1's initial commit — Motorola through Realme, alert
+semantics, the IST test fix) is not committed/pushed to GitHub**, only
+present as uncommitted working-tree state
 on this machine. No NAS work done or planned this phase.
 
 ## 14. August 2026 contamination incident — permanent regression protection

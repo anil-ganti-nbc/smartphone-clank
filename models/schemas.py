@@ -19,6 +19,15 @@ class Manufacturer(str, Enum):
     ONEPLUS = "oneplus"
     NOTHING = "nothing"
     XIAOMI = "xiaomi"
+    # Wave 2 qualification (docs/wave2/) — staging-only, never production
+    # scope. See collectors/wave1/__init__.py::WAVE1_PRODUCTION_SCOPE, which
+    # this list has no bearing on.
+    MOTOROLA = "motorola"
+    HONOR = "honor"
+    OPPO = "oppo"
+    VIVO = "vivo"
+    REALME = "realme"
+    ASUS = "asus"
 
 
 class SourceType(str, Enum):

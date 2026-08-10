@@ -78,7 +78,18 @@ def init(
     """Initialize database and verify configuration."""
     settings = _load_environment(config, environment)
     setup_logging(settings.get("logging", "level", default="INFO"))
-    init_db(settings.database_url, echo=settings.get("database", "echo", default=False))
+    if environment == PRODUCTION:
+        # Production schema evolves only through explicit `db init`/`db
+        # adopt`/`db upgrade` — never implicitly via create_all() on a normal
+        # command. See docs/infra/MIGRATION_AUDIT.md.
+        from database.schema_guard import ensure_schema_or_refuse, SchemaError
+        try:
+            ensure_schema_or_refuse(settings.database_url, context="main.py init")
+        except SchemaError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+    else:
+        init_db(settings.database_url, echo=settings.get("database", "echo", default=False))
     console.print("[green]Database initialized.[/green]")
     console.print(f"Manufacturers: {', '.join(settings.manufacturers)}")
     collectors = build_collectors(settings)
@@ -102,7 +113,15 @@ def run(
     """Start the intelligence pipeline (scheduled or one-shot)."""
     settings = _load_environment(config, environment)
     setup_logging(settings.get("logging", "level", default="INFO"))
-    init_db(settings.database_url)
+    if environment == PRODUCTION:
+        from database.schema_guard import ensure_schema_or_refuse, SchemaError
+        try:
+            ensure_schema_or_refuse(settings.database_url, context="main.py run")
+        except SchemaError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+    else:
+        init_db(settings.database_url)
     session_factory = get_session_factory(settings.database_url)
     pipeline = IntelligencePipeline(settings, session_factory)
 
@@ -111,7 +130,7 @@ def run(
         pipeline.run_once()
         if environment == STAGING:
             from collectors.wave1 import run_wave1_once
-            run_wave1_once(settings, session_factory)
+            run_wave1_once(settings, session_factory, pipeline=pipeline)
         console.print("[green]Done.[/green]")
         return
 
@@ -147,8 +166,14 @@ def reset_staging(
         console.print(f"[green]Deleted {db_path}[/green]")
     else:
         console.print(f"[yellow]{db_path} did not exist[/yellow]")
-    init_db(settings.database_url)
-    console.print("[green]Staging database re-initialized empty.[/green]")
+    # Staging goes through the same schema_guard path production's `db init`
+    # uses (spec: staging convenience must not mean a different
+    # schema-creation mechanism) — see docs/infra/MIGRATION_AUDIT.md for why
+    # this is create_all-on-empty-db + stamp rather than pure Alembic DDL
+    # replay today.
+    from database.schema_guard import init_fresh_database
+    rev = init_fresh_database(settings.database_url)
+    console.print(f"[green]Staging database re-initialized, now at {rev}.[/green]")
 
 
 @app.command()
@@ -521,21 +546,148 @@ app.add_typer(db_app, name="db")
 
 @db_app.command("version")
 def db_version(config: str = typer.Option("config/config.yaml")):
+    """Deprecated — use `db current`. Kept for backward compatibility."""
     from database.migrate import get_version
     settings = load_settings(config)
     v = get_version(settings.database_url)
-    console.print(f"Schema version: {v or '(none — run db upgrade)'}")
+    console.print(f"[yellow]Deprecated, use `db current`.[/yellow] Legacy schema version: {v or '(none)'}")
+
+
+@db_app.command("current")
+def db_current(config: str = typer.Option("config/config.yaml")):
+    """Alembic revision this database is actually stamped at."""
+    from database.schema_guard import current_revision, head_revision
+    settings = load_settings(config)
+    cur = current_revision(settings.database_url)
+    head = head_revision(settings.database_url)
+    status = "[green]up to date[/green]" if cur == head else "[yellow]BEHIND HEAD[/yellow]" if cur else "[red]NOT STAMPED[/red]"
+    console.print(f"Database:  {settings.database_url}")
+    console.print(f"Current:   {cur or '(none)'}")
+    console.print(f"Head:      {head}")
+    console.print(f"Status:    {status}")
+
+
+@db_app.command("history")
+def db_history(config: str = typer.Option("config/config.yaml")):
+    """Full Alembic revision history (not DB-specific — this is the migration lineage)."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    cfg = Config(str(Path(__file__).resolve().parent / "alembic.ini"))
+    script = ScriptDirectory.from_config(cfg)
+    for rev in script.walk_revisions():
+        console.print(f"  {rev.revision}  <-  {rev.down_revision or '(base)'}   {rev.doc}")
+
+
+@db_app.command("check")
+def db_check(config: str = typer.Option("config/config.yaml")):
+    """Non-mutating: exits 0 if schema is up to date, 1 otherwise. Safe to run
+    before a scheduled collection cycle without risk of side effects."""
+    from database.schema_guard import ensure_schema_or_refuse, SchemaError
+    settings = load_settings(config)
+    try:
+        ensure_schema_or_refuse(settings.database_url, context="db check")
+        console.print("[green]Schema up to date.[/green]")
+    except SchemaError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+
+@db_app.command("init")
+def db_init(config: str = typer.Option("config/config.yaml")):
+    """New database only: create the file, build full schema, stamp at head,
+    verify. Refuses if the database already has tables — use `db adopt` for
+    those. See database/schema_guard.py::init_fresh_database for exactly why
+    this isn't pure Alembic DDL replay yet (10 tables have no migration
+    history — docs/infra/MIGRATION_AUDIT.md)."""
+    from pathlib import Path as _Path
+    from database.schema_guard import init_fresh_database, SchemaError
+    settings = load_settings(config)
+    url = settings.database_url
+    if url.startswith("sqlite"):
+        db_path = _Path(url.replace("sqlite:///", ""))
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        rev = init_fresh_database(url)
+    except SchemaError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]Initialized empty database, now at {rev}.[/green]")
+
+
+@db_app.command("adopt")
+def db_adopt(
+    config: str = typer.Option("config/config.yaml"),
+    revision: str = typer.Option("0006_run_provenance", help="Revision to verify shape against and stamp to"),
+    yes: bool = typer.Option(False, "--yes", help="Actually stamp (dry run otherwise)"),
+):
+    """Existing, unstamped database whose tables already look right: verify
+    shape, create only genuinely-missing tables via known-safe CREATE-only
+    DDL (never touches an existing table), back up, then stamp. Never blindly
+    stamps head — the operator names the revision they've verified matches."""
+    from database.migrate import backup_db
+    from database.schema_guard import verify_schema_shape, create_missing_tables_safely, stamp, current_revision
+    settings = load_settings(config)
+    url = settings.database_url
+
+    already = current_revision(url)
+    if already:
+        console.print(f"[yellow]Already stamped at {already} — nothing to adopt.[/yellow]")
+        raise typer.Exit(0)
+
+    shape = verify_schema_shape(url, revision)
+    console.print(f"Expected tables (through {revision}): {len(shape.tables_expected)}")
+    console.print(f"Missing: {shape.tables_missing or '(none)'}")
+
+    if not yes:
+        console.print("[yellow]Dry run — pass --yes to create missing tables (safe, CREATE-only) and stamp.[/yellow]")
+        raise typer.Exit(0)
+
+    b = backup_db(url)
+    if b:
+        console.print(f"Backup: {b}")
+
+    created = create_missing_tables_safely(url, revision)
+    if created:
+        console.print(f"Created (previously missing, empty, safe): {created}")
+
+    recheck = verify_schema_shape(url, revision)
+    if not recheck.matches:
+        console.print(f"[red]Refusing to stamp — still missing after safe-create: {recheck.tables_missing}[/red]")
+        raise typer.Exit(1)
+
+    stamp(url, revision)
+    console.print(f"[green]Stamped {url} at {revision}.[/green]")
 
 
 @db_app.command("upgrade")
 def db_upgrade(config: str = typer.Option("config/config.yaml")):
-    from database.migrate import upgrade, backup_db
+    """Alembic is the sole migration authority — see docs/infra/MIGRATION_AUDIT.md.
+    Backs up, applies pending revisions in order, verifies, reports the
+    revision transition. Refuses (via db_adopt's own guard) rather than
+    guessing if the database was never stamped — run `db adopt` first."""
+    from database.migrate import backup_db
+    from database.schema_guard import current_revision, head_revision, upgrade_to_head, SchemaError
     settings = load_settings(config)
-    b = backup_db(settings.database_url)
+    url = settings.database_url
+
+    before = current_revision(url)
+    if before is None:
+        console.print(
+            "[red]Database is not stamped with any Alembic revision. "
+            "Run `python main.py db adopt` (existing DB) or `python main.py db init` (new DB) first.[/red]"
+        )
+        raise typer.Exit(1)
+
+    head = head_revision(url)
+    if before == head:
+        console.print(f"[green]Already up to date at {before}.[/green]")
+        raise typer.Exit(0)
+
+    b = backup_db(url)
     if b:
         console.print(f"Backup: {b}")
-    v = upgrade(settings.database_url)
-    console.print(f"[green]Upgraded to {v}[/green]")
+    after = upgrade_to_head(url)
+    console.print(f"[green]Upgraded {before} -> {after}[/green]")
 
 
 @db_app.command("backup")
@@ -586,6 +738,46 @@ def production_scope_cmd(config: str = typer.Option("config/config.yaml")):
     running_ids = {c.name for c in build_collectors(settings, project_root=root)}
     for cid in sorted(all_known - running_ids):
         console.print(f"  skipped  {cid}")
+
+
+@production_app.command("validate")
+def production_validate_cmd(config: str = typer.Option("config/config.yaml")):
+    """Config <-> registry <-> runtime consistency for every Wave1/Wave2 OEM.
+
+    The operator's single command for proving production scope is coherent
+    (docs/infra/PRODUCTION_SCOPE_AUDIT.md Part 7) — this is the same check
+    runtime/daemon.py runs at startup (and refuses to start on failure), run
+    here read-only for diagnosis. Exits non-zero on any mismatch."""
+    from collectors.wave1 import validate_production_scope, ADAPTER_REGISTRY
+
+    settings = load_settings(config)
+    result = validate_production_scope(settings)
+
+    console.print("[bold]OEM        approved configured adapter enabled scheduled status[/bold]")
+    all_known = sorted(set(ADAPTER_REGISTRY.keys()) | {s.oem for s in result.statuses})
+    by_oem = {s.oem: s for s in result.statuses}
+    for oem in all_known:
+        s = by_oem.get(oem)
+        if s is None:
+            continue
+
+        def yn(b: bool) -> str:
+            return "YES" if b else " NO"
+
+        status = "OK" if s.ok else ("STAGING_ONLY" if not s.approved else "MISMATCH")
+        color = "green" if s.ok else ("dim" if not s.approved else "red")
+        console.print(
+            f"[{color}]{oem:<10} {yn(s.approved):>8} {yn(s.manufacturer_configured):>10} "
+            f"{yn(s.adapter_registered):>7} {yn(s.config_enabled):>7} {yn(s.scheduled):>9} {status}[/{color}]"
+        )
+
+    console.print()
+    if result.ok:
+        console.print("[bold green]Production scope: OK — no mismatches[/bold green]")
+    else:
+        console.print("[bold red]Production scope: MISMATCH[/bold red]")
+        console.print(result.render())
+        raise typer.Exit(code=1)
 
 
 discord_app = typer.Typer(help="Discord webhook delivery (newsroom + maintenance)")
@@ -970,20 +1162,19 @@ def report(
     import json as _json
     settings = load_settings(config)
     session_factory = get_session_factory(settings.database_url)
-    # ensure metrics tables exist
-    from database.models import Base
-    from observability import metrics as metrics_mod
-    from database.session import get_engine
+    # report is a read-path command — it must never create or alter schema,
+    # only refuse with a clear instruction if required tables are missing.
+    from database.schema_guard import ensure_tables_present_or_refuse, SchemaError
     try:
-        eng = get_engine(settings.database_url)
-        Base.metadata.create_all(bind=eng)
-    except Exception:
-        pass
+        ensure_tables_present_or_refuse(
+            settings.database_url,
+            ["collector_run_metrics", "metrics_baselines", "rolling_stats"],
+            context="report",
+        )
+    except SchemaError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
     with session_scope(session_factory) as session:
-        # ensure metrics tables on this engine
-        metrics_mod.CollectorRunRecord.__table__.create(bind=session.get_bind(), checkfirst=True)
-        metrics_mod.MetricsBaseline.__table__.create(bind=session.get_bind(), checkfirst=True)
-        metrics_mod.RollingStat.__table__.create(bind=session.get_bind(), checkfirst=True)
         from collectors import production_scope
         scope = production_scope(settings, project_root=Path(__file__).resolve().parent)
         rep = daily_report(session, tz=tz, production_scope=scope)

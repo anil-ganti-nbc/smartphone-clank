@@ -83,7 +83,7 @@ class MaintenanceAlerter:
                 logger.debug("maint dedupe lookup skipped: %s", type(e).__name__)
 
         msg = (
-            f"**⚠️ Samsung Collector Degraded**\n"
+            f"**⚠️ Collector Degraded**\n"
             f"**Source:** {source_id}\n"
             f"**Problem:** {problem}\n"
             f"**Detail:** {detail}\n"

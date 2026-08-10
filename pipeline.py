@@ -55,6 +55,7 @@ class IntelligencePipeline:
             significant_delta=settings.get("discord", "significant_confidence_delta", default=15),
             enabled=settings.get("discord", "enabled", default=True),
             session_factory=session_factory,
+            staging_label=(settings.environment == "staging"),
         )
 
     def _apply_knowledge(self, device: Device) -> dict:
@@ -85,7 +86,18 @@ class IntelligencePipeline:
             "kb_confidence": enriched.confidence,
         }
 
-    def process_discoveries(self, discoveries: list[Discovery], session: Session) -> tuple[int, int]:
+    def process_discoveries(self, discoveries: list[Discovery], session: Session) -> tuple[int, int, int, int]:
+        """Returns (new_count, updated_count, resighted, dropped_out_of_scope).
+
+        `dropped_out_of_scope` counts discoveries whose manufacturer isn't in
+        `self.settings.manufacturers` — this is the exact mechanism behind
+        the Motorola incident (docs/wave2/MOTOROLA_CANARY_REPORT.md): a
+        validated, adapter-produced candidate can still be silently dropped
+        here if the manufacturer allowlist (a config-level gate, independent
+        of collectors.wave1.PRODUCTION_OEM_SCOPE) omits it. Callers —
+        especially collectors/wave1/staging_pipeline.py's baseline-completion
+        logic — must treat a nonzero value here as a signal, not silently
+        discard it. See docs/infra/PRODUCTION_SCOPE_AUDIT.md."""
         resolver = EntityResolver(
             session,
             weights=self.weights,
@@ -98,9 +110,20 @@ class IntelligencePipeline:
         new_count = 0
         updated_count = 0
         resighted = 0
+        dropped_out_of_scope = 0
 
         for disc in discoveries:
             if disc.manufacturer and disc.manufacturer.value not in self.settings.manufacturers:
+                dropped_out_of_scope += 1
+                logger.warning(
+                    "process_discoveries: dropping candidate for manufacturer=%s "
+                    "(source=%s) — not in settings.manufacturers %s. This is not "
+                    "necessarily a bug (deliberately-unconfigured manufacturer), "
+                    "but callers must not treat the resulting 0 as ordinary quiet "
+                    "success — see docs/infra/PRODUCTION_SCOPE_AUDIT.md.",
+                    disc.manufacturer.value if disc.manufacturer else "unknown",
+                    disc.source, sorted(self.settings.manufacturers),
+                )
                 continue
 
             # Capture pre-resolve confidence if device already exists
@@ -175,16 +198,25 @@ class IntelligencePipeline:
                 # Update evidence contribution values only; confidence projection stays ledger-based
                 self.decay.recompute_device(session, device)
 
-            # Alerts
+            # Alerts. Idempotency: `is_new`/`evidence_added` are derived from
+            # a DB comparison (resolver.resolve()), and device creation +
+            # record_alert() commit together in the same session — so a
+            # retried/restarted run that reprocesses the same discovery
+            # after a successful commit will find the device already exists
+            # with unchanged evidence, take neither branch below, and cannot
+            # re-fire either alert. No separate dedupe table is needed; this
+            # reuses the resolver's own existing device/evidence identity —
+            # see tests/wave1/test_alert_semantics.py::test_reprocessing_a_delivered_event_does_not_duplicate_the_alert.
             tl = timeline.get_timeline(device.id)
             if is_new:
                 new_count += 1
                 session.flush()
-                msg_id = self.alerter.alert_new_device(device, timeline=tl, knowledge_bits=kb_bits)
-                self.alerter.record_alert(
-                    session, device, "new_device",
-                    f"New device {device.model_number}", msg_id, payload=kb_bits,
-                )
+                msg_id = self.alerter.alert_new_device(device, timeline=tl, knowledge_bits=kb_bits, session=session)
+                if msg_id:
+                    self.alerter.record_alert(
+                        session, device, "new_device",
+                        f"New device {device.model_number}", msg_id, payload=kb_bits,
+                    )
                 logger.info(
                     f"NEW DEVICE: {device.manufacturer} {device.model_number} "
                     f"(conf={device.confidence}, family={device.family_name})"
@@ -193,6 +225,7 @@ class IntelligencePipeline:
                 updated_count += 1
                 msg_id = self.alerter.alert_device_updated(
                     device, old_confidence=old_confidence, new_source=disc.source, timeline=tl,
+                    session=session,
                 )
                 if msg_id:
                     self.alerter.record_alert(
@@ -201,13 +234,13 @@ class IntelligencePipeline:
                     )
                 logger.info(
                     f"UPDATED: {device.manufacturer} {device.model_number} "
-                    f"{old_confidence} → {device.confidence}"
+                    f"{old_confidence} -> {device.confidence}"
                 )
             else:
                 # Known device, unchanged evidence — re-sight only
                 resighted += 1
 
-        return new_count, updated_count, resighted
+        return new_count, updated_count, resighted, dropped_out_of_scope
 
     def run_collector(self, collector, run_reason: str = "production_manual") -> None:
         result, discoveries = collector.run()
@@ -230,13 +263,17 @@ class IntelligencePipeline:
             else:
                 ctx.status = "success"
 
-            new_c, upd_c, resight_c = self.process_discoveries(discoveries, session)
+            new_c, upd_c, resight_c, dropped_c = self.process_discoveries(discoveries, session)
             ctx.new_devices = new_c
             ctx.updated_devices = upd_c
             ctx.evidence_added = new_c + upd_c
             # v0.3.8: wire report counters that were previously always zero
             ctx.meaningful_changes = new_c + upd_c
             ctx.resighted = resight_c
+            if dropped_c:
+                # See docs/infra/PRODUCTION_SCOPE_AUDIT.md — surfaced, never silent.
+                note = f"dropped_out_of_scope={dropped_c}"
+                ctx.notes = (ctx.notes + " | " + note) if ctx.notes else note
             # HTTP metrics from collector if available
             http_m = getattr(collector, "_last_http_metrics", None) or {}
             if http_m:

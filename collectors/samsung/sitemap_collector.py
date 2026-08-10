@@ -42,8 +42,7 @@ class SamsungSitemapCollector(BaseCollector):
         self._last_http_metrics: dict = {}
 
     def collect(self) -> list[Discovery]:
-        from database.session import get_session_factory, init_db
-        from database.models import Base, SitemapProductUrl, SitemapTraversalState
+        from database.session import get_session_factory
         from sqlalchemy.orm import Session
 
         # Prefer explicit URL; fall back to settings
@@ -55,16 +54,20 @@ class SamsungSitemapCollector(BaseCollector):
             except Exception:
                 db_url = "sqlite:///./data/clank.db"
 
-        init_db(db_url)
-        factory = get_session_factory(db_url)
-        # ensure new tables
+        # A collector's collect() runs on every cycle — it must never create
+        # or alter schema itself, only refuse with a clear instruction if
+        # its tables are missing. See database/schema_guard.py.
+        from database.schema_guard import ensure_tables_present_or_refuse, SchemaError
         try:
-            from database.session import get_engine
-            eng = get_engine(db_url)
-            SitemapProductUrl.__table__.create(bind=eng, checkfirst=True)
-            SitemapTraversalState.__table__.create(bind=eng, checkfirst=True)
-        except Exception as e:
-            logger.debug("table ensure: %s", e)
+            ensure_tables_present_or_refuse(
+                db_url,
+                ["sitemap_product_urls", "sitemap_traversal_state"],
+                context="samsung_us_support_sitemap collector",
+            )
+        except SchemaError as e:
+            logger.error("refusing to collect: %s", e)
+            return []
+        factory = get_session_factory(db_url)
 
         disc = SamsungSitemapDiscovery(
             user_agent=self.user_agent,

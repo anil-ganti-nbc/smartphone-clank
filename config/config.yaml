@@ -23,6 +23,10 @@ manufacturers:
   - oneplus
   - nothing
   - xiaomi
+  - motorola
+  - honor
+  - oppo
+  - realme
 
 # Confidence weights (configurable)
 confidence_weights:
@@ -262,3 +266,41 @@ support_change_weights:
 
 snapshots:
   max_per_url: 20
+
+# Wave 1 production canary. Only OEMs in
+# collectors/wave1/__init__.py::WAVE1_PRODUCTION_SCOPE actually run in
+# production regardless of what's enabled here — see docs/wave1/PROMOTION_REPORT.md,
+# docs/wave1/promotion/google.md, docs/wave1/promotion/nothing.md,
+# docs/wave1/promotion/oneplus.md. xiaomi is deliberately absent below;
+# adding an `enabled: true` block for it here would still not bring it into
+# production (second gate), but it is not done as a matter of hygiene —
+# don't pre-stage keys for an OEM that hasn't been canaried (KEEP_STAGING).
+wave1:
+  google:
+    enabled: true
+    max_fetches_per_run: 20
+    interval_minutes: 45
+  nothing:
+    enabled: true
+    max_fetches_per_run: 20
+    interval_minutes: 90
+  oneplus:
+    enabled: true
+    max_fetches_per_run: 20
+    interval_minutes: 90
+  motorola:
+    enabled: true
+    max_fetches_per_run: 20
+    interval_minutes: 360
+  honor:
+    enabled: true
+    max_fetches_per_run: 20
+    interval_minutes: 360
+  oppo:
+    enabled: true
+    max_fetches_per_run: 20
+    interval_minutes: 360
+  realme:
+    enabled: true
+    max_fetches_per_run: 20
+    interval_minutes: 360

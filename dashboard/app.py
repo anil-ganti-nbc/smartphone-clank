@@ -33,10 +33,20 @@ _engine = None
 
 
 def create_app(database_url: str = "sqlite:///./data/clank.db") -> FastAPI:
+    """The dashboard is a real production runtime path (launched by
+    scripts/windows/start-dashboard.ps1, supervised by health-check.ps1) —
+    it must never create or alter schema. Refuses via SchemaError if the
+    tables it reads are missing, same as the daemon and `report`."""
     global _Session, _engine
+    from database.schema_guard import ensure_tables_present_or_refuse
+
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
     _engine = create_engine(database_url, connect_args=connect_args)
-    Base.metadata.create_all(bind=_engine)  # disposable demo only; production uses alembic
+    ensure_tables_present_or_refuse(
+        database_url,
+        ["devices", "evidence", "timeline_events", "aliases", "snapshots", "webhook_deliveries"],
+        context="dashboard",
+    )
     _Session = sessionmaker(bind=_engine, autoflush=False, autocommit=False)
     return app
 

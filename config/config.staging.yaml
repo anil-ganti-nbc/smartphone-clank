@@ -33,6 +33,12 @@ manufacturers:
   - oneplus
   - nothing
   - xiaomi
+  # Wave 2 qualification (docs/wave2/) — staging-only, never added to
+  # WAVE1_PRODUCTION_SCOPE (collectors/wave1/__init__.py).
+  - motorola
+  - honor
+  - oppo
+  - realme
 
 confidence_weights:
   support_page: 10

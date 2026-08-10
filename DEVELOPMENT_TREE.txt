@@ -1,0 +1,24 @@
+THIS IS THE DEVELOPMENT TREE. It is not executed by any production process.
+
+Production tree: C:\Users\anil\Desktop\smartphone-clank-prod
+  (frozen copy, Task Scheduler executes it exclusively as of 2026-08-10 —
+  see docs/infra/PROD_DEV_SPLIT.md)
+
+Staging DB: data/clank-staging.db (never data/clank.db)
+Staging Discord: STAGING_DISCORD_WEBHOOK_URL only (see .env) — never the
+  production DISCORD_WEBHOOK_URL/MAINTENANCE_DISCORD_WEBHOOK_URL, even if
+  present in the environment (config/settings.py enforces this).
+
+Run tests:    PYTHONPATH=. python -m pytest -q
+Run staging:  python main.py run --environment staging --once
+Reset staging: python main.py reset-staging --yes
+
+Do NOT point a Windows Task Scheduler production task at this tree.
+Do NOT copy this tree's data/clank-staging.db or config/config.staging.yaml
+into the production tree.
+
+This tree's data/clank.db is a development-only Samsung production DB
+that exists purely as this session's editing/testing history requires (see
+docs/infra/PRE_SPLIT_PRODUCTION_SNAPSHOT.md for its state at the moment of
+the split) — it is NOT the live production database going forward. The live
+one is in the production tree above.

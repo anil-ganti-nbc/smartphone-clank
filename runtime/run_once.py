@@ -107,7 +107,8 @@ def is_due(session, collector_name: str, interval_minutes: int) -> bool:
 def main(argv: list[str] | None = None) -> int:
     from collectors import build_collectors
     from config.settings import load_settings
-    from database.session import get_session_factory, init_db
+    from database.session import get_session_factory
+    from database.schema_guard import ensure_schema_or_refuse, SchemaError
     from pipeline import IntelligencePipeline
 
     parser = argparse.ArgumentParser(description="Smartphone Clank one-shot collector runner")
@@ -122,7 +123,14 @@ def main(argv: list[str] | None = None) -> int:
 
     config_path = os.environ.get("CLANK_CONFIG", "config/config.yaml")
     settings = load_settings(config_path)
-    init_db(settings.database_url)
+    # See docs/infra/MIGRATION_AUDIT.md — this cloud one-shot entrypoint is a
+    # production runtime path, same rule as runtime/daemon.py: refuse rather
+    # than implicitly mutate schema.
+    try:
+        ensure_schema_or_refuse(settings.database_url, context="runtime.run_once startup")
+    except SchemaError as e:
+        log.error("refusing to start: %s", e)
+        return 1
     session_factory = get_session_factory(settings.database_url)
     pipeline = IntelligencePipeline(settings, session_factory)
 

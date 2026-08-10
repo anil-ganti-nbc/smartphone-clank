@@ -30,7 +30,13 @@ def _session():
     return sessionmaker(bind=engine)()
 
 
-def _seed_healthy(rec: MetricsRecorder, n: int = 10, candidates: int = 10):
+def _seed_healthy(rec: MetricsRecorder, n: int = 10, candidates: int = 10, now: datetime | None = None):
+    """`now` defaults to datetime.utcnow() for callers that only care about
+    relative ordering between rows. Callers that check day-bucketed
+    aggregation (e.g. daily_report()) must pass a fixed `now` and use the
+    same value as that call's `day` argument — otherwise this is flaky
+    around real-world day/timezone boundaries (see test_daily_report)."""
+    anchor = now or datetime.utcnow()
     for i in range(n):
         ctx = rec.start("test_collector")
         ctx.status = "success"
@@ -40,7 +46,7 @@ def _seed_healthy(rec: MetricsRecorder, n: int = 10, candidates: int = 10):
         ctx.valid_devices = candidates - 1
         r = rec.finish(ctx)
         r.duration_ms = 1000 + i * 10
-        r.started_at = datetime.utcnow() - timedelta(hours=n - i)
+        r.started_at = anchor - timedelta(hours=n - i)
 
 
 def test_record_immutable_runs():
@@ -86,11 +92,17 @@ def test_regression_candidate_collapse():
 
 
 def test_daily_report():
+    # Deterministic fixed reference time, deliberately noon UTC — safely
+    # mid-day in every timezone daily_report() might bucket by (including
+    # its Asia/Kolkata default), so seeded rows can never land on the wrong
+    # side of a real-world day boundary regardless of when this test runs.
+    # See _seed_healthy()'s docstring: `now` here must match `day` below.
+    anchor = datetime(2026, 1, 15, 12, 0, 0)
     s = _session()
     rec = MetricsRecorder(s)
-    _seed_healthy(rec, 3)
+    _seed_healthy(rec, 3, now=anchor)
     s.commit()
-    report = daily_report(s)
+    report = daily_report(s, day=anchor)
     assert report["total_runs"] >= 3
     md = format_daily_report_md(report)
     assert "Daily Operational Report" in md

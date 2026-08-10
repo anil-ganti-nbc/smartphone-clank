@@ -75,7 +75,12 @@ class FamilyService:
         fam_name = enriched.family
         if device.marketing_name:
             # e.g. "Galaxy S27 Ultra" → family "Galaxy S27"
-            m = re.match(r"(?i)(galaxy\s+s\s*\d+|galaxy\s+z\s+\w+|pixel\s+\d+|nothing\s+phone\s*\d*)", device.marketing_name)
+            m = re.match(
+                r"(?i)(galaxy\s+s\s*\d+|galaxy\s+z\s+\w+|pixel\s+\d+|nothing\s+phone\s*\d*|"
+                r"cmf\s+phone\s*\d*|oneplus\s+\d+|oneplus\s+open|oneplus\s+nord|"
+                r"redmi\s+note\s+\d+|redmi\s+\d+|poco\s+\w+|xiaomi\s+\d+)",
+                device.marketing_name,
+            )
             if m:
                 fam_name = m.group(1).strip().title()
 

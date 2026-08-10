@@ -45,7 +45,11 @@ def backup_db(url: str, backup_dir: str = "data/backups") -> Optional[str]:
         return None
     Path(backup_dir).mkdir(parents=True, exist_ok=True)
     stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    dest = str(Path(backup_dir) / f"clank_{stamp}.db")
+    # Name from the source file itself (e.g. "clank-staging") rather than a
+    # hardcoded "clank" — a staging backup must never look identical to a
+    # production one in data/backups/.
+    stem = Path(path).stem or "clank"
+    dest = str(Path(backup_dir) / f"{stem}_{stamp}.db")
     shutil.copy2(path, dest)
     return dest
 

@@ -42,6 +42,8 @@ REASON_COOKIE_TEXT = "cookie_text"
 REASON_PROMOTION_TEXT = "promotion_text"
 REASON_EMPTY = "empty_field"
 REASON_DUPLICATE = "duplicate_candidate"
+REASON_PC_HARDWARE = "pc_hardware"          # laptop/motherboard/GPU/monitor (Wave 2: ASUS)
+REASON_UNRECOGNIZED_FORMAT = "unrecognized_format"
 
 
 @dataclass

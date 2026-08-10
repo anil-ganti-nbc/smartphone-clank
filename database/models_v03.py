@@ -111,3 +111,30 @@ class RejectedCandidate(Base):
     url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     category_hint: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SourceBaselineState(Base):
+    """
+    Per-source baseline epoch (spec: Wave 1 integration, section 6-8). Distinct
+    from `sitemap_traversal_state`, which tracks Samsung's cursor-based
+    incremental crawl of a single large sitemap. Wave 1 sources (Google
+    category page, OnePlus/Nothing sitemaps) are fetched in full on every run
+    — one successful run already constitutes a complete traversal of that
+    source's enumerable surface — so this table only needs to record whether
+    the *first* successful run has happened, not cursor position.
+
+    Baseline semantics live here, not in the pipeline: `baseline_completed_at`
+    being unset is what makes `IntelligencePipeline`/`DiscordAlerter` treat
+    every new device as `backfill=True` (spec section 7) — see
+    `collectors/wave1/baseline.py::BaselineTracker`.
+    """
+    __tablename__ = "wave1_baseline_state"
+
+    source_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    manufacturer: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    baseline_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    baseline_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    baseline_version: Mapped[int] = mapped_column(Integer, default=1)
+    run_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completion_criterion: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

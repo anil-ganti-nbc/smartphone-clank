@@ -1,0 +1,9 @@
+🧪 **STAGING — NOT A PRODUCTION ALERT**
+**🆕 New Device Detected**
+**Pixel 11**
+Model: `PIXEL 11`
+Manufacturer: Google
+Confidence: **30**
+Evidence: none
+Family: Pixel
+First seen: 2026-08-10 11:31 UTC

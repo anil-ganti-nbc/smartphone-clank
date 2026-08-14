@@ -76,6 +76,23 @@ def test_health_score_blocked():
     print("blocked health ok", h["score"])
 
 
+def test_health_score_unexpected_zero_is_degraded():
+    session = _session()
+    rec = MetricsRecorder(session)
+    for _ in range(3):
+        ctx = rec.start("catalogue")
+        ctx.status = "success"
+        ctx.candidates_found = 7
+        rec.finish(ctx)
+    ctx = rec.start("catalogue")
+    ctx.status = "unexpected_zero"
+    rec.finish(ctx)
+    session.commit()
+    health = rec.health_score("catalogue")
+    assert health["label"] in ("Degraded", "Unhealthy", "Blocked / critical")
+    assert any(f["reason"] == "unexpected_zero" for f in health["factors"])
+
+
 def test_regression_candidate_collapse():
     s = _session()
     rec = MetricsRecorder(s)

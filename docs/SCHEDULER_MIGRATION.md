@@ -1,78 +1,99 @@
-# Scheduler migration: BlockingScheduler daemon -> external one-shot
+# Scheduler remediation: resident APScheduler to source-level systemd timers
 
-2026-08-10. Implements the previously-reviewed and approved Architecture A
-(external scheduler + one-shot application execution). This document is the
-required behavioral mapping -- every responsibility the prior
-`runtime/daemon.py` (`apscheduler.schedulers.blocking.BlockingScheduler`)
-provided, and its explicit replacement or justification for not needing one.
+## Decision
 
-## Before re-reading this: re-verified against current `main` first
+Use one external systemd timer and one-shot service per accepted production
+source. Do not use a worker pool and do not increase APScheduler's misfire
+grace as the primary fix.
 
-Confirmed unchanged from the prior architecture review before implementing
-anything: same scheduled jobs, same cadences (45/60/60/60/60/180/180/240
-x4/300/360x3 minutes across `config.yaml` + `samsung_sources.yaml`), same
-`max_instances=1`/`coalesce=True`/`replace_existing=True` job settings, same
-one-time `DateTrigger` startup jobs staggered 5/20/30s, same
-`samsung_us_support_sitemap` critical-registration check, same signal
-handlers, same lack of any daemon-liveness health dependency.
+Production evidence from the resident scheduler showed 165 lost due
+executions by 2026-08-14 19:59 UTC, with lateness up to 95.480 seconds. The
+single worker avoided database races, but APScheduler discarded other due jobs
+when Samsung occupied that worker beyond the default grace window.
 
-## Complete responsibility mapping
+## Re-evaluated options
 
-| BlockingScheduler responsibility | Replacement | Why |
-|---|---|---|
-| Multiple independent cadences (`IntervalTrigger` per collector) | Preserved as-is: `runtime/run_once.py`'s `is_due()` reads the same `interval_minutes` from the same `config.yaml`/`samsung_sources.yaml` | No change needed -- the cadence data was never scheduler-internal state |
-| Per-source schedules | Preserved (same source, same mechanism) | Same reason |
-| `max_instances=1` (same-collector duplicate prevention) | External `flock` wrapper around the whole one-shot invocation, at the cron level (`deploy_run.sh` on Hetzner) | This was **already only an in-process guarantee** -- APScheduler's default job store is in-memory, so it never actually protected against two separate OS processes. No lock code of any kind exists anywhere in this codebase prior to this change. `flock` is new safety, not a replacement for something that worked before across processes. |
-| `coalesce=True` (collapse missed runs into one) | Not needed | There is no in-process missed-run queue under an external-scheduler model to collapse in the first place -- each tick either finds a collector due or it doesn't |
-| One-time `DateTrigger` startup jobs (staggered 5/20/30s) | Not needed | The very first tick against a fresh/empty `CollectorRunRecord` table finds every collector due (no recorded run) and runs all of them -- equivalent first-run coverage without a separate startup concept |
-| Retry/backoff | Unchanged | This was never implemented by the scheduler itself -- a failed collector simply remains "due" per the same `interval_minutes` and is retried on the next natural tick, exactly as before |
-| "Daemon alive" heartbeat | N/A -- never existed | `dashboard/app.py`'s `/healthz` was independently confirmed (during the prior architecture review) to only check DB connectivity, never daemon liveness. Nothing to preserve, nothing fabricated. |
-| Startup registry validation (`samsung_us_support_sitemap` must be registered) | Preserved verbatim in `run_once.py` | Direct copy of the same check |
-| Signal handling / graceful shutdown | N/A under one-shot model | A one-shot process either completes a collector run or the whole container is killed before starting the next one -- there is no long-lived loop to signal out of |
+### A. Source-specific external timers — selected
 
-## What changed vs. what didn't
+Each source has an independent systemd timer and visible one-shot service.
+The process first obtains a non-blocking same-source lock, then waits on a
+blocking shared execution lock. This keeps the current database safety
+property (only one complete pipeline run writes at a time) without letting a
+different source's due invocation disappear.
 
-**Changed**: `runtime/run_once.py` is new. `Dockerfile` /
-`docker-compose.staging.yml` are new (the `.draft` files predate this
-implementation and were promoted/replaced). `config/config.docker.yaml` is
-new (a local-config-overlay file using the *already-existing*
-`CLANK_LOCAL_CONFIG` mechanism in `config/settings.py` -- no changes to
-`settings.py` itself -- to point the database at the mounted volume instead
-of the repo-relative default).
+### B. Bounded worker pool — rejected for now
 
-**Not changed**: `runtime/daemon.py` itself (left in place, still valid for
-any future Windows/local use), collector registry, collector scope,
-production allowlist, database schema, database initialization logic
-(`database/session.py`'s `Base.metadata.create_all` -- already safe,
-additive-only, not touched), any collector/parser/entity-resolution code,
-notification behavior.
+Network collection could run concurrently, but the current pipeline shares
+entity, evidence, timeline, baseline, alert, and absence/removal state. A
+worker-pool change would require splitting collection from persistence across
+both collector families and proving more logical invariants than this P1 fix
+needs.
+
+### C. APScheduler executor redesign — rejected
+
+More workers would expose the same unproven concurrent-write semantics. A
+larger grace window would keep the single queue and merely hide/delay the
+observed failure mode.
+
+## Current database/concurrency evidence
+
+- SQLite journal mode: `delete`.
+- Connection busy timeout: 5000 ms.
+- Foreign keys are enabled by SQLAlchemy's connection hook for application
+  connections; an independent read-only audit connection correctly reported
+  its own default as off.
+- Base collectors perform network work before a transaction, while Wave OEM
+  cycles also discover before opening their persistence transaction.
+- Both paths write shared device/evidence/timeline/alert/metrics tables.
+- Wave cycles temporarily set an in-process `DiscordAlerter.backfill` flag.
+- WAL alone would not resolve duplicate entity/alert or absence/removal races.
+
+Cross-source concurrent writes are therefore **not proven safe**. The selected
+design serializes the complete one-shot run. This is conservative but bounded:
+the process for every due source already exists and waits on a kernel lock, so
+there is no scheduler grace window that can discard it.
+
+## Responsibility mapping
+
+| Old responsibility | Replacement |
+|---|---|
+| independent interval jobs | one timer per source with the same configured cadence |
+| `max_instances=1` | systemd service-instance state plus non-blocking per-source file lock |
+| `coalesce=True` | an active service instance remains the single surviving invocation |
+| default misfire grace | removed; the started service waits for the shared execution lock |
+| staggered startup dates | distinct `OnActiveSec` offsets, relative to timer activation on both cutover and reboot |
+| startup scope validation | fail-closed target construction before source selection |
+| failure isolation | one service/process per source; a nonzero exit does not stop other timers |
+| run/health recording | existing pipeline and immutable metrics rows |
+| retry behavior | unchanged: next configured interval, no new immediate retry |
+| graceful shutdown | one-shot process lifecycle managed by systemd |
+| daemon restart after reboot | timers start from their staggered boot offsets |
+
+The canonical source/cadence map remains:
+
+| Source ID | Cadence |
+|---|---:|
+| `samsung_us_support_sitemap` | 180 min |
+| `google_store_category_phones` | 45 min |
+| `nothing_products_sitemap` | 90 min |
+| `oneplus_regional_sitemap` | 90 min |
+| `motorola_regional_sitemap` | 360 min |
+| `honor_global_sitemap` | 360 min |
+| `oppo_global_sitemap` | 360 min |
+| `realme_regional_sitemap` | 360 min |
+
+No source is added or removed.
 
 ## Provenance
 
-Same pattern as every other clank in this fleet:
-`org.opencontainers.image.revision` (OCI label, from a `GIT_REVISION` build
-arg) plus `CLANK_SOURCE_REVISION` env var. This project had no existing
-identity/version contract; exposing `source_revision` through a
-dashboard-facing endpoint was assessed as not cleanly compatible without
-touching `dashboard/app.py`'s existing `/healthz` shape more than this
-scheduler-migration task's scope allows -- **GitHub SHA == OCI revision** is
-therefore the authoritative provenance record for this deployment, per the
-brief's own explicit fallback rule ("if exposing `source_revision` would
-require an invasive shared-runtime schema change, stop and report that
-architectural boundary rather than hacking around it"). Verifiable via
-`docker inspect <image> --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'`.
+Every one-shot logs `source_revision=<full SHA>` by reading the actual checkout
+with `git rev-parse HEAD`. `CLANK_SOURCE_REVISION` may be supplied only as a
+full 40-character SHA; malformed values report `unknown`. Deployment must
+still compare GitHub's accepted merge SHA, the checkout SHA, and the logged
+runtime SHA rather than trusting a tag or directory name.
 
-## Persistent state
+## Soak rule
 
-Fresh isolated Hetzner volume (`smartphone_clank_staging_data`) -- the
-Windows local database was not copied, per the default migration model and
-this being under-construction/staging soak, not a promotion of existing
-production state.
-
-## Locking, proven
-
-An external `flock`-wrapped deliberate overlap test (two `docker compose
-run` invocations, fired truly simultaneously) confirmed the second is
-refused before it starts (no output, no writer), the first completes
-normally. See `ai/handoff/HETZNER_DEPLOYMENT.md` for the actual command
-and result.
+Installing this runtime starts a new soak clock. Historical database and run
+evidence remains intact but cannot be counted as unattended evidence for the
+new scheduler architecture.

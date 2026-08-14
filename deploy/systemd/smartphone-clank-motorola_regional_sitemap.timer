@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule Smartphone Clank Motorola source
+
+[Timer]
+OnActiveSec=8min
+OnUnitActiveSec=6h
+AccuracySec=1s
+Unit=smartphone-clank-source@motorola_regional_sitemap.service
+
+[Install]
+WantedBy=timers.target

@@ -81,6 +81,7 @@ class OEMCycleResult:
         self.pages_requested = 0
         self.bytes_downloaded = 0
         self.errors: list[str] = []
+        self.health_status = "unknown"
 
     def __repr__(self):
         return (
@@ -111,7 +112,21 @@ def run_oem_staging_cycle(adapter: DiscoveryAdapter, pipeline, session_factory, 
     result.http_failures = adapter_metrics.http_failures
     result.errors = list(adapter_metrics.errors)
 
-    run_succeeded = adapter_metrics.pages_fetched > 0 and adapter_metrics.http_failures == 0
+    unexpected_zero = (
+        adapter_metrics.pages_fetched > 0
+        and not candidates
+        and not adapter.allows_empty_result
+    )
+    if unexpected_zero:
+        health_status = "unexpected_zero"
+    elif adapter_metrics.errors and adapter_metrics.pages_fetched > 0:
+        health_status = "degraded"
+    elif adapter_metrics.http_failures or adapter_metrics.errors or adapter_metrics.pages_fetched == 0:
+        health_status = "blocked"
+    else:
+        health_status = "success"
+    result.health_status = health_status
+    run_succeeded = health_status == "success"
 
     with session_scope(session_factory) as session:
         tracker = BaselineTracker(session)
@@ -158,7 +173,7 @@ def run_oem_staging_cycle(adapter: DiscoveryAdapter, pipeline, session_factory, 
         ctx.http_failures = result.http_failures
         ctx.candidates_found = result.candidates_found
         ctx.valid_devices = result.valid
-        ctx.status = "success" if run_succeeded else ("blocked" if adapter_metrics.http_failures else "partial")
+        ctx.status = health_status
         if result.errors:
             ctx.notes = "; ".join(result.errors)[:500]
 

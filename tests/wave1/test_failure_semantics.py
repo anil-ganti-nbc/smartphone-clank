@@ -13,6 +13,7 @@ from collectors.wave1.staging_pipeline import run_oem_staging_cycle
 from config.settings import load_settings
 from database.models import Base, Device
 from database.session import get_session_factory, session_scope
+from observability.metrics import CollectorRunRecord
 from pipeline import IntelligencePipeline
 
 from tests.wave1.test_integration import FixtureAdapter, _candidate
@@ -72,6 +73,10 @@ class ZeroCandidatesHealthyFetchAdapter(FixtureAdapter):
         return [], metrics
 
 
+class LegitimatelyEmptyAdapter(ZeroCandidatesHealthyFetchAdapter):
+    allows_empty_result = True
+
+
 @pytest.mark.parametrize("adapter_cls,expect_status", [
     (Http403Adapter, "blocked"),
     (Http429Adapter, "blocked"),
@@ -111,13 +116,24 @@ def test_zero_candidates_on_healthy_fetch_does_not_falsely_complete_baseline(sta
     adapter = ZeroCandidatesHealthyFetchAdapter("nothing", "nothing_products_sitemap", [])
     result = run_oem_staging_cycle(adapter, pipeline, session_factory)
 
-    # HTTP succeeded (200, page fetched) but zero candidates: our conservative
-    # completion criterion still marks baseline complete for THIS run (the
-    # source really did return its full catalogue, which happened to be
-    # empty in this fixture) but must not fabricate any device/evidence.
+    # HTTP succeeded but a catalogue source unexpectedly produced nothing.
+    # It is explicitly unhealthy and cannot complete a fresh baseline.
     assert result.new_devices == 0
+    assert result.health_status == "unexpected_zero"
+    assert result.baseline_just_completed is False
     with session_scope(session_factory) as session:
         assert session.query(Device).filter(Device.manufacturer == "nothing").count() == 0
+        row = session.query(CollectorRunRecord).order_by(CollectorRunRecord.started_at.desc()).first()
+        assert row.status == "unexpected_zero"
+
+
+def test_known_legitimately_empty_source_is_not_falsely_degraded(staging_settings):
+    settings, _ = staging_settings
+    pipeline, session_factory = _pipeline(settings)
+    adapter = LegitimatelyEmptyAdapter("nothing", "nothing_products_sitemap", [])
+    result = run_oem_staging_cycle(adapter, pipeline, session_factory)
+    assert result.health_status == "success"
+    assert result.baseline_just_completed is True
 
 
 def test_temporary_failure_then_recovery_resumes_normally(staging_settings):

@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule Smartphone Clank Realme source
+
+[Timer]
+OnActiveSec=14min
+OnUnitActiveSec=6h
+AccuracySec=1s
+Unit=smartphone-clank-source@realme_regional_sitemap.service
+
+[Install]
+WantedBy=timers.target

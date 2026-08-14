@@ -1,60 +1,13 @@
-"""One-shot execution: the cloud-migration replacement for the
-BlockingScheduler daemon (runtime/daemon.py).
+"""Run one production source once under external source-level scheduling.
 
-Checks each registered collector's last recorded run (from
-CollectorRunRecord -- already persisted for every attempt, success or
-failure, by pipeline.py's own MetricsRecorder; not reconstructed from
-anything in-memory) against its configured interval_minutes, runs exactly
-the collectors that are due, once, then exits. Intended to be invoked
-repeatedly by an external scheduler (cron/systemd timer).
-
-Full behavioral mapping from the prior BlockingScheduler model:
-
-  multiple independent cadences   -> preserved as-is: interval_minutes is
-                                      still read from the same
-                                      config.yaml/samsung_sources.yaml
-  per-source schedules            -> preserved (same source)
-  max_instances=1 (same collector)-> was actually an in-process-only
-                                      guarantee already (APScheduler's job
-                                      store is in-memory, so this never
-                                      protected against two separate
-                                      processes anyway); replaced by an
-                                      external `flock` wrapper around the
-                                      whole tick at the cron-invocation
-                                      level (see deploy_run.sh on the
-                                      Hetzner host) -- no lock code exists
-                                      anywhere in this codebase today, so
-                                      this is new safety, not a
-                                      replacement for an existing
-                                      in-app mechanism. See
-                                      docs/SCHEDULER_MIGRATION.md.
-  coalesce=True                   -> not needed: a tick either finds a
-                                      collector due or it doesn't; there is
-                                      no in-process missed-run queue to
-                                      collapse under an external-scheduler
-                                      model
-  one-time DateTrigger startup    -> not needed: the first tick against a
-  jobs (staggered 5/20/30s)          fresh/empty CollectorRunRecord table
-                                      finds every collector due and runs
-                                      all of them, giving equivalent
-                                      first-run coverage without an
-                                      explicit startup concept
-  retry/backoff                   -> unchanged: this script does not retry
-                                      failed collectors itself; a failed
-                                      collector remains "due" (its last
-                                      recorded run does not satisfy
-                                      interval_minutes going forward from
-                                      the failure) and will be attempted
-                                      again on the next tick, same
-                                      resilience the interval trigger
-                                      always provided
-  "daemon alive" heartbeat        -> never existed: dashboard/app.py's
-                                      /healthz only ever checked DB
-                                      connectivity, never daemon liveness
-                                      -- nothing to preserve or fabricate
-
-Does NOT change: collector scope, collector registry, config loading,
-database initialization, or any collector/pipeline/normalization logic.
+Each systemd timer invokes exactly one source.  A non-blocking per-source
+lock replaces APScheduler ``max_instances=1``.  A blocking shared execution
+lock intentionally serializes the complete run because today's SQLite
+database uses rollback-journal mode and the entity/alert pipeline has not
+proved concurrent logical writes safe.  Unlike the former single-worker
+APScheduler queue, every due source has its own live service/process while it
+waits, so a long Samsung run cannot make another source's due execution
+disappear through ``misfire_grace_time``.
 """
 
 from __future__ import annotations
@@ -63,8 +16,10 @@ import argparse
 import logging
 import os
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -72,12 +27,21 @@ if str(ROOT) not in sys.path:
 os.chdir(ROOT)
 
 from runtime.daemon import setup_runtime_logging  # reuse, no duplication
+from runtime.locks import FileLock, lock_directory, safe_lock_name
+from runtime.provenance import source_revision
 
 log = logging.getLogger("clank.runtime.run_once")
 
 EXIT_OK = 0
 EXIT_UNKNOWN_COLLECTOR = 2
 EXIT_ALL_FAILED = 1
+
+
+@dataclass(frozen=True)
+class ScheduledTarget:
+    source_id: str
+    interval_minutes: int
+    run: Callable[[], object]
 
 
 def _last_run_at(session, collector_name: str):
@@ -104,8 +68,76 @@ def is_due(session, collector_name: str, interval_minutes: int) -> bool:
     return datetime.utcnow() >= last + timedelta(minutes=interval_minutes)
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_targets(settings, pipeline, session_factory, *, project_root: Path = ROOT) -> list[ScheduledTarget]:
+    """Build exactly the accepted production scope from both registries."""
     from collectors import build_collectors
+    from collectors.wave1 import (
+        assert_production_scope_or_refuse,
+        build_wave1_production_collectors,
+    )
+    from collectors.wave1.staging_pipeline import run_oem_staging_cycle
+    from runtime.environment import PRODUCTION, assert_db_matches_environment
+
+    assert_db_matches_environment(settings.database_url, PRODUCTION)
+    assert_production_scope_or_refuse(settings)
+
+    targets: list[ScheduledTarget] = []
+    collectors_cfg = settings.get("collectors", default={}) or {}
+    for collector in build_collectors(settings, project_root=project_root):
+        interval = int((collectors_cfg.get(collector.name) or {}).get("interval_minutes") or 180)
+        targets.append(ScheduledTarget(
+            source_id=collector.name,
+            interval_minutes=interval,
+            run=lambda collector=collector: pipeline.run_collector(
+                collector, run_reason="production_scheduled"
+            ),
+        ))
+
+    wave_cfg = settings.get("wave1", default={}) or {}
+    for adapter in build_wave1_production_collectors(settings):
+        interval = int((wave_cfg.get(adapter.manufacturer) or {}).get("interval_minutes") or 45)
+        targets.append(ScheduledTarget(
+            source_id=adapter.source_name,
+            interval_minutes=interval,
+            run=lambda adapter=adapter: run_oem_staging_cycle(
+                adapter, pipeline, session_factory, run_reason="production_scheduled"
+            ),
+        ))
+    return targets
+
+
+def run_target(target: ScheduledTarget, session_factory, database_url: str, *, force: bool) -> str:
+    """Return ``ran``, ``not_due``, or ``already_running``; raise on failure."""
+    locks = lock_directory(database_url)
+    source_lock = FileLock(locks / f"source-{safe_lock_name(target.source_id)}.lock")
+    if not source_lock.acquire(blocking=False):
+        log.warning("skip %s: same-source invocation already running", target.source_id)
+        return "already_running"
+    try:
+        execution_lock = FileLock(locks / "shared-execution.lock")
+        log.info("waiting for shared execution lock source=%s", target.source_id)
+        with execution_lock:
+            session = session_factory()
+            try:
+                due = force or is_due(session, target.source_id, target.interval_minutes)
+            finally:
+                session.close()
+            if not due:
+                log.info(
+                    "skip %s: not due (interval=%s min)",
+                    target.source_id,
+                    target.interval_minutes,
+                )
+                return "not_due"
+            log.info("job start %s", target.source_id)
+            target.run()
+            log.info("job done %s", target.source_id)
+            return "ran"
+    finally:
+        source_lock.release()
+
+
+def main(argv: list[str] | None = None) -> int:
     from config.settings import load_settings
     from database.session import get_session_factory
     from database.schema_guard import ensure_schema_or_refuse, SchemaError
@@ -123,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
 
     config_path = os.environ.get("CLANK_CONFIG", "config/config.yaml")
     settings = load_settings(config_path)
+    log.info("startup source_revision=%s root=%s", source_revision(ROOT), ROOT)
     # See docs/infra/MIGRATION_AUDIT.md — this cloud one-shot entrypoint is a
     # production runtime path, same rule as runtime/daemon.py: refuse rather
     # than implicitly mutate schema.
@@ -134,45 +167,40 @@ def main(argv: list[str] | None = None) -> int:
     session_factory = get_session_factory(settings.database_url)
     pipeline = IntelligencePipeline(settings, session_factory)
 
-    collectors = build_collectors(settings, project_root=ROOT)
-    collectors_cfg = settings.get("collectors", default={}) or {}
+    try:
+        targets = build_targets(settings, pipeline, session_factory)
+    except Exception:
+        log.exception("refusing to start: production target validation failed")
+        return 1
 
-    if not any(c.name == "samsung_us_support_sitemap" for c in collectors):
+    if not any(t.source_id == "samsung_us_support_sitemap" for t in targets):
         log.error(
             "CRITICAL: samsung_us_support_sitemap not in production registry — "
             "discovery will not run. Check config and samsung_sources.yaml"
         )
 
     if args.collector:
-        collectors = [c for c in collectors if c.name == args.collector]
-        if not collectors:
+        targets = [target for target in targets if target.source_id == args.collector]
+        if not targets:
             print(f"unknown collector: {args.collector}")
             return EXIT_UNKNOWN_COLLECTOR
 
-    considered = len(collectors)
+    considered = len(targets)
     ran = 0
     failed = 0
-    session = session_factory()
-    try:
-        for col in collectors:
-            cfg = collectors_cfg.get(col.name, {}) or {}
-            interval = int(cfg.get("interval_minutes") or 180)
-            due = args.force or is_due(session, col.name, interval)
-            if not due:
-                log.info("skip %s: not due (interval=%s min)", col.name, interval)
-                continue
-            log.info("job start %s", col.name)
-            try:
-                pipeline.run_collector(col, run_reason="production_scheduled")
-                log.info("job done %s", col.name)
+    skipped = 0
+    for target in targets:
+        try:
+            outcome = run_target(target, session_factory, settings.database_url, force=args.force)
+            if outcome == "ran":
                 ran += 1
-            except Exception:
-                log.exception("job failed %s", col.name)
-                failed += 1
-    finally:
-        session.close()
+            else:
+                skipped += 1
+        except Exception:
+            log.exception("job failed %s", target.source_id)
+            failed += 1
 
-    print(f"ran={ran} failed={failed} considered={considered}")
+    print(f"ran={ran} failed={failed} skipped={skipped} considered={considered}")
     return EXIT_ALL_FAILED if (considered and ran == 0 and failed > 0) else EXIT_OK
 
 

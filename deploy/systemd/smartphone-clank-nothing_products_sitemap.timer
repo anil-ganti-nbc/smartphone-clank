@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule Smartphone Clank Nothing source
+
+[Timer]
+OnActiveSec=4min
+OnUnitActiveSec=90min
+AccuracySec=1s
+Unit=smartphone-clank-source@nothing_products_sitemap.service
+
+[Install]
+WantedBy=timers.target

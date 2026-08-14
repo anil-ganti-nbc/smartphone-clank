@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 from database.models import Base
 from observability.metrics import CollectorRunRecord, MetricsRecorder
-from runtime.run_once import is_due
+from runtime.run_once import build_targets, is_due
 
 
 def _session():
@@ -86,3 +86,20 @@ def test_failed_run_still_counts_for_due_check_no_special_retry():
     session.commit()
 
     assert is_due(session, "flaky_collector", interval_minutes=180) is False
+
+
+def test_production_targets_include_every_current_source_and_cadence():
+    from config.settings import load_settings
+
+    settings = load_settings("config/config.yaml")
+    targets = build_targets(settings, object(), lambda: None)
+    assert {target.source_id: target.interval_minutes for target in targets} == {
+        "samsung_us_support_sitemap": 180,
+        "google_store_category_phones": 45,
+        "nothing_products_sitemap": 90,
+        "oneplus_regional_sitemap": 90,
+        "motorola_regional_sitemap": 360,
+        "honor_global_sitemap": 360,
+        "oppo_global_sitemap": 360,
+        "realme_regional_sitemap": 360,
+    }

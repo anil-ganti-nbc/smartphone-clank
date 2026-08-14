@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule Smartphone Clank Oppo source
+
+[Timer]
+OnActiveSec=12min
+OnUnitActiveSec=6h
+AccuracySec=1s
+Unit=smartphone-clank-source@oppo_global_sitemap.service
+
+[Install]
+WantedBy=timers.target

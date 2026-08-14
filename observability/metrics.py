@@ -42,7 +42,7 @@ class CollectorRunRecord(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    status: Mapped[str] = mapped_column(String(16), default="success")  # success|partial|failed|blocked
+    status: Mapped[str] = mapped_column(String(16), default="success")  # success|partial|degraded|unexpected_zero|failed|blocked
     pages_requested: Mapped[int] = mapped_column(Integer, default=0)
     pages_fetched: Mapped[int] = mapped_column(Integer, default=0)
     bytes_downloaded: Mapped[int] = mapped_column(Integer, default=0)
@@ -333,8 +333,14 @@ class MetricsRecorder:
         elif last.status == "partial":
             score -= 15
             factors.append({"reason": "last_run_partial", "delta": -15})
+        elif last.status == "degraded":
+            score -= 40
+            factors.append({"reason": "last_run_degraded", "delta": -40})
+        elif last.status == "unexpected_zero":
+            score -= 50
+            factors.append({"reason": "unexpected_zero", "delta": -50})
 
-        fails = sum(1 for r in recent if r.status in ("failed", "blocked"))
+        fails = sum(1 for r in recent if r.status in ("failed", "blocked", "unexpected_zero"))
         if recent:
             fail_rate = fails / len(recent)
             if fail_rate > 0.5:

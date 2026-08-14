@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule Smartphone Clank OnePlus source
+
+[Timer]
+OnActiveSec=6min
+OnUnitActiveSec=90min
+AccuracySec=1s
+Unit=smartphone-clank-source@oneplus_regional_sitemap.service
+
+[Install]
+WantedBy=timers.target

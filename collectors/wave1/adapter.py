@@ -86,6 +86,10 @@ class DiscoveryAdapter:
     source_name: str = "unknown"
     source_role: str = DISCOVERY
     validation_state: str = EXPERIMENTAL
+    # Catalogue/discovery adapters are expected to return at least one
+    # candidate after a usable fetch. A genuinely-empty source must opt in
+    # explicitly so an HTML consent/challenge shell cannot look healthy.
+    allows_empty_result: bool = False
 
     def __init__(self, *, user_agent: str, min_delay: float = 1.5, timeout: int = 30, max_fetches_per_run: int = 20):
         self.user_agent = user_agent

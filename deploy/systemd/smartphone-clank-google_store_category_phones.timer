@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule Smartphone Clank Google source
+
+[Timer]
+OnActiveSec=2min
+OnUnitActiveSec=45min
+AccuracySec=1s
+Unit=smartphone-clank-source@google_store_category_phones.service
+
+[Install]
+WantedBy=timers.target

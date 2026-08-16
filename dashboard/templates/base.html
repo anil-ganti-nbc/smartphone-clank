@@ -37,6 +37,7 @@
     <a href="/health">Sources</a>
     <a href="/metrics">Metrics</a>
     <a href="/discord">Discord</a>
+    <span class="muted" style="margin-left:auto; font-size:12px">build {{ runtime_identity.build_revision }} · DB {{ runtime_identity.database_revision }}</span>
   </header>
   <main>
     {% block content %}{% endblock %}

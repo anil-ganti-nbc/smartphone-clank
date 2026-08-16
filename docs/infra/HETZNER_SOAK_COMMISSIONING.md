@@ -1,5 +1,34 @@
 # Hetzner Soak Commissioning — Executed Migration Report
 
+## 2026-08-16 scheduler-remediation cutover — soak in progress
+
+The former resident `smartphone-clank.service` BlockingScheduler was retired
+at **2026-08-16T10:19:33Z**. Its historical log evidence (226 APScheduler
+misfires; latest at 07:46:51Z) is preserved. It is now `disabled` and
+`inactive`; no cron, user-systemd, Docker, or resident-Python launcher was
+found for Smartphone collectors.
+
+The deployment checkout is the accepted merge commit
+`b8b89885e5229cb36dbc47e78cd1ef4fd1b32937`. The production model remains a
+native Git checkout and venv, so no OCI image/revision applies. Eight
+source-specific systemd timers now provide the sole scheduling authority:
+Samsung (3h), Google (45m), Nothing and OnePlus (90m), and Motorola, Honor,
+Oppo, and Realme (6h), with their documented staggered activation offsets.
+
+Immediately before cutover, the application's SQLite backup mechanism wrote
+`data/backups/clank_20260816_101802.db`; its SHA-256 sidecar verified and
+`PRAGMA integrity_check` returned `ok` (261 devices, 277 evidence records,
+178 collector runs). The live database was also `ok` after cutover.
+
+Natural timer firings have already been observed for Samsung at 10:20:04Z
+and Google at 10:21:34Z. Both logged the accepted full source revision,
+obtained the shared execution lock, and exited successfully after truthful
+not-due checks based on pre-cutover run history. Google’s next natural,
+eligible collection is scheduled for 11:06:33Z. No manual collector run was
+used as soak evidence. The scheduler-remediation soak clock starts at
+**2026-08-16T10:19:33Z**; substantive Google and multi-source collection
+evidence remains pending and must not be inferred from these initial skips.
+
 **Date: 2026-08-10/11. Verdict: `HETZNER_SOAK_COMMISSIONED`.**
 
 Supersedes the 2026-08-11 verification-only version of this document

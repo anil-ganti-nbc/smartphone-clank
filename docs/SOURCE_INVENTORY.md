@@ -10,7 +10,7 @@ question.
 
 | OEM | Source | Region | Role | State | Last live validation | Cadence | Production? | Known limitation |
 |---|---|---|---|---|---|---|---|---|
-| Samsung | `samsungmobilepress.com` / support sitemap (`collectors/samsung/sitemap_collector.py`) | US | DISCOVERY + MONITORING | LIVE_VALIDATED | 2026-08-10 | ~90 min (see prod `config.yaml`) | **YES** | Specialized collector, pre-dates Wave 1 shared path — see `docs/wave2/POST_WAVE2_COMPLEXITY_AUDIT.md` |
+| Samsung | `samsungmobilepress.com` / support sitemap (`collectors/samsung/sitemap_collector.py`) | US | DISCOVERY + MONITORING | LIVE_VALIDATED | 2026-08-10 | 180 min | **YES** | Specialized collector, pre-dates Wave 1 shared path — see `docs/wave2/POST_WAVE2_COMPLEXITY_AUDIT.md` |
 | Google | `store.google.com/{region}/category/phones` | US (+ expandable) | DISCOVERY | LIVE_VALIDATED | 2026-08-10 | 45 min | **YES** | Slug-based marketing name only, no formal model number |
 | Nothing | `nothing.tech/sitemap/products/1.xml` (+ region variants) | UK/US/IN | DISCOVERY | LIVE_VALIDATED | 2026-08-10 | 90 min | **YES** | Mixed with accessories/apparel in the same sitemap — denylist-filtered |
 | OnePlus | `oneplus.com/{region}/sitemap.xml` | US | DISCOVERY (weak monitoring) | LIVE_VALIDATED | 2026-08-10 | 90 min | **YES** | No CPH codes exposed; slug-only discovery |

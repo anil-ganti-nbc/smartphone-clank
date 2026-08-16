@@ -133,6 +133,14 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        # Explicit local-state boundary for native field-test builds.  Leave
+        # existing deployments byte-for-byte on their configured/default URL
+        # unless the documented override is supplied.
+        data_dir = os.getenv("CLANK_DATA_DIR")
+        if data_dir:
+            directory = Path(data_dir).expanduser().resolve()
+            directory.mkdir(parents=True, exist_ok=True)
+            return f"sqlite:///{directory / 'clank.db'}"
         return self.get("database", "url", default="sqlite:///./data/clank.db")
 
     @property

@@ -1128,14 +1128,16 @@ def dashboard(
         console.print("[bold red]WARNING: Binding outside loopback. Dashboard is not hardened for public exposure.[/bold red]")
     settings = load_settings(config)
     try:
-        from dashboard.app import create_app, app as dash_app
+        from dashboard.app import create_app
         import uvicorn
     except ImportError as e:
         console.print(f"[red]Missing dashboard dependency: {e}[/red]")
         console.print("Run: .\\.venv\\Scripts\\python.exe -m pip install fastapi uvicorn jinja2")
         raise typer.Exit(1)
-    create_app(settings.database_url)
+    dash_app = create_app(settings.database_url)
     console.print(f"[green]Newsroom console: http://{host}:{port}/[/green]")
+    # Reuse the already-resolved settings so `--config` and CLANK_DATA_DIR are
+    # applied consistently. Reloading settings here used to discard --config.
     uvicorn.run(dash_app, host=host, port=port, reload=False, log_level="info")
 
 

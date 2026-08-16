@@ -6,6 +6,7 @@ No React/Vue/npm. Server-rendered.
 from __future__ import annotations
 
 import html
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -32,12 +33,15 @@ _Session = None
 _engine = None
 
 
-def create_app(database_url: str = "sqlite:///./data/clank.db") -> FastAPI:
+def create_app(database_url: str | None = None) -> FastAPI:
     """The dashboard is a real production runtime path (launched by
     scripts/windows/start-dashboard.ps1, supervised by health-check.ps1) —
     it must never create or alter schema. Refuses via SchemaError if the
     tables it reads are missing, same as the daemon and `report`."""
     global _Session, _engine
+    if database_url is None:
+        from config.settings import load_settings
+        database_url = load_settings().database_url
     from database.schema_guard import ensure_tables_present_or_refuse
 
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
@@ -48,6 +52,15 @@ def create_app(database_url: str = "sqlite:///./data/clank.db") -> FastAPI:
         context="dashboard",
     )
     _Session = sessionmaker(bind=_engine, autoflush=False, autocommit=False)
+    # Deliberately expose only non-secret runtime provenance in the local UI.
+    # The database revision is evidence that the dashboard and collector are
+    # pointed at the same state, while the build revision identifies a frozen
+    # field-test bundle without reading any credentials.
+    from database.schema_guard import current_revision
+    TEMPLATES.env.globals["runtime_identity"] = {
+        "build_revision": os.getenv("CLANK_BUILD_REVISION", "local-source"),
+        "database_revision": current_revision(database_url) or "unstamped",
+    }
     return app
 
 

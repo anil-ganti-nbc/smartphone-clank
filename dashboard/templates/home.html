@@ -3,6 +3,52 @@
 {% block content %}
 <h1>Newsroom overview</h1>
 <p class="muted">Local console · facts only · release-state defaults to unknown</p>
+{% if local_collection_sources %}
+<div class="card" id="local-collection">
+  <h2>Collect now</h2>
+  <p class="muted">Manual field-test run against one approved public production source. Delivery is disabled.</p>
+  <select id="collection-source" aria-label="Collection source">
+    {% for source_id, label in local_collection_sources %}
+    <option value="{{ source_id }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+  <button id="collection-start" type="button">Collect now</button>
+  <p id="collection-status" class="muted">READY · Select a source and collect current data.</p>
+  <pre id="collection-metrics" class="muted" style="white-space:pre-wrap"></pre>
+</div>
+<script>
+(() => {
+  const button = document.getElementById('collection-start');
+  const source = document.getElementById('collection-source');
+  const status = document.getElementById('collection-status');
+  const metrics = document.getElementById('collection-metrics');
+  let timer = null;
+  let startedAt = null;
+  async function poll() {
+    const response = await fetch('/api/local-collection/status', {cache: 'no-store'});
+    const data = await response.json();
+    startedAt = data.started_at ? new Date(data.started_at) : startedAt;
+    const elapsed = startedAt && ['queued', 'running'].includes(data.state)
+      ? ` · ${Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000))}s` : '';
+    status.textContent = `${(data.state || '').toUpperCase()} · ${data.source_label || ''} · ${data.message || ''}${elapsed}`.trim();
+    button.disabled = ['queued', 'running'].includes(data.state);
+    metrics.textContent = data.metrics ? JSON.stringify(data.metrics, null, 2) : '';
+    if (button.disabled) timer = window.setTimeout(poll, 1000);
+    else if (data.finished_at && ['completed', 'success'].includes(data.state)) window.setTimeout(() => location.reload(), 900);
+  }
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    status.textContent = 'Submitting collection…';
+    await fetch('/api/local-collection/run', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({source_id: source.value})
+    });
+    if (timer) window.clearTimeout(timer);
+    poll();
+  });
+})();
+</script>
+{% endif %}
 <div class="grid">
   <div class="card">
     <h2>Recent activity</h2>
@@ -16,7 +62,7 @@
         <td>{{ d.family_name or "—" }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="muted">No devices yet. Run discovery or demo populate.</td></tr>
+      <tr><td colspan="4" class="muted">No local smartphone observations yet. Select a source and collect current data.</td></tr>
       {% endfor %}
     </table>
   </div>

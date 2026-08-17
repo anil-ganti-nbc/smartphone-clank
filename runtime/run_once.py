@@ -68,7 +68,10 @@ def is_due(session, collector_name: str, interval_minutes: int) -> bool:
     return datetime.utcnow() >= last + timedelta(minutes=interval_minutes)
 
 
-def build_targets(settings, pipeline, session_factory, *, project_root: Path = ROOT) -> list[ScheduledTarget]:
+def build_targets(
+    settings, pipeline, session_factory, *, project_root: Path = ROOT,
+    run_reason: str = "production_scheduled",
+) -> list[ScheduledTarget]:
     """Build exactly the accepted production scope from both registries."""
     from collectors import build_collectors
     from collectors.wave1 import (
@@ -89,7 +92,7 @@ def build_targets(settings, pipeline, session_factory, *, project_root: Path = R
             source_id=collector.name,
             interval_minutes=interval,
             run=lambda collector=collector: pipeline.run_collector(
-                collector, run_reason="production_scheduled"
+                collector, run_reason=run_reason
             ),
         ))
 
@@ -100,7 +103,7 @@ def build_targets(settings, pipeline, session_factory, *, project_root: Path = R
             source_id=adapter.source_name,
             interval_minutes=interval,
             run=lambda adapter=adapter: run_oem_staging_cycle(
-                adapter, pipeline, session_factory, run_reason="production_scheduled"
+                adapter, pipeline, session_factory, run_reason=run_reason
             ),
         ))
     return targets

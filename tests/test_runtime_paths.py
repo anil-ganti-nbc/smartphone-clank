@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
+
+import pytest
 
 from config.settings import load_settings
 from database.schema_guard import init_fresh_database
@@ -11,6 +14,22 @@ from database.schema_guard import init_fresh_database
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config" / "config.yaml"
+
+
+@pytest.fixture(autouse=True)
+def _restore_native_environment():
+    names = (
+        "CLANK_DATA_DIR", "CLANK_LOCK_DIR", "CLANK_ENV_FILE", "CLANK_LOCAL_CONFIG",
+        "DISCORD_WEBHOOK_URL", "MAINTENANCE_DISCORD_WEBHOOK_URL",
+        "STAGING_DISCORD_WEBHOOK_URL", "SMARTPHONE_FIELD_TEST_HOME",
+    )
+    before = {name: os.environ.get(name) for name in names}
+    yield
+    for name, value in before.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
 
 
 def _load_with_clean_env(monkeypatch):
@@ -87,3 +106,24 @@ def test_native_launcher_uses_app_support_and_never_bundle_state(monkeypatch, tm
     assert bundle_dir not in state_dir.parents
     assert "native/macos" not in str(state_dir)
     assert Path(__import__("os").environ["CLANK_ENV_FILE"]).parent == state_dir
+    assert Path(__import__("os").environ["CLANK_LOCK_DIR"]).parent == state_dir
+
+
+def test_native_launcher_refuses_inherited_state_and_delivery_env(monkeypatch, tmp_path):
+    launcher_path = ROOT / "native" / "macos" / "launcher.py"
+    spec = importlib.util.spec_from_file_location("smartphone_macos_launcher_isolation", launcher_path)
+    assert spec and spec.loader
+    launcher = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(launcher)
+
+    monkeypatch.setattr(launcher.Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.setenv("CLANK_DATA_DIR", str(tmp_path / "production-data"))
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://example.invalid/production")
+    monkeypatch.setenv("MAINTENANCE_DISCORD_WEBHOOK_URL", "https://example.invalid/maintenance")
+
+    state_dir = launcher.configure_field_test_runtime()
+
+    assert state_dir == tmp_path / "home" / "Library" / "Application Support" / "Smartphone Clank"
+    assert __import__("os").environ["CLANK_DATA_DIR"] == str(state_dir)
+    assert __import__("os").environ["DISCORD_WEBHOOK_URL"] == ""
+    assert __import__("os").environ["MAINTENANCE_DISCORD_WEBHOOK_URL"] == ""

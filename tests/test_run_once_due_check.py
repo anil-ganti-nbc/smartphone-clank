@@ -103,3 +103,23 @@ def test_production_targets_include_every_current_source_and_cadence():
         "oppo_global_sitemap": 360,
         "realme_regional_sitemap": 360,
     }
+
+
+def test_target_builder_keeps_scheduled_default_and_allows_manual_reason(monkeypatch):
+    from config.settings import load_settings
+
+    settings = load_settings("config/config.yaml")
+    reasons = []
+
+    class Pipeline:
+        def run_collector(self, collector, run_reason):
+            reasons.append(run_reason)
+
+    scheduled = build_targets(settings, Pipeline(), lambda: None)
+    scheduled[0].run()
+    manual = build_targets(
+        settings, Pipeline(), lambda: None, run_reason="field_test_manual"
+    )
+    manual[0].run()
+
+    assert reasons == ["production_scheduled", "field_test_manual"]

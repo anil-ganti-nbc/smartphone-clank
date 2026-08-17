@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Request, Form, Query
+from fastapi import FastAPI, Request, Form, Query, Body
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -31,14 +31,15 @@ app = FastAPI(title="Clank Newsroom", docs_url=None, redoc_url=None)
 # DB session — set by create_app
 _Session = None
 _engine = None
+_collection_controller = None
 
 
-def create_app(database_url: str | None = None) -> FastAPI:
+def create_app(database_url: str | None = None, collection_controller=None) -> FastAPI:
     """The dashboard is a real production runtime path (launched by
     scripts/windows/start-dashboard.ps1, supervised by health-check.ps1) —
     it must never create or alter schema. Refuses via SchemaError if the
     tables it reads are missing, same as the daemon and `report`."""
-    global _Session, _engine
+    global _Session, _engine, _collection_controller
     if database_url is None:
         from config.settings import load_settings
         database_url = load_settings().database_url
@@ -52,6 +53,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
         context="dashboard",
     )
     _Session = sessionmaker(bind=_engine, autoflush=False, autocommit=False)
+    _collection_controller = collection_controller
     # Deliberately expose only non-secret runtime provenance in the local UI.
     # The database revision is evidence that the dashboard and collector are
     # pointed at the same state, while the build revision identifies a frozen
@@ -105,10 +107,29 @@ def home(request: Request):
                 "devices": devices,
                 "rising": rising,
                 "now": datetime.utcnow().isoformat(),
+                "local_collection_sources": (
+                    __import__("dashboard.local_collection", fromlist=["SMARTPHONE_FIELD_TEST_SOURCES"])
+                    .SMARTPHONE_FIELD_TEST_SOURCES if _collection_controller else ()
+                ),
             },
         )
     finally:
         session.close()
+
+
+@app.get("/api/local-collection/status")
+def local_collection_status():
+    if _collection_controller is None:
+        return JSONResponse({"error": "local_collection_unavailable"}, status_code=404)
+    return _collection_controller.snapshot()
+
+
+@app.post("/api/local-collection/run")
+def local_collection_run(payload: dict = Body(...)):
+    if _collection_controller is None:
+        return JSONResponse({"error": "local_collection_unavailable"}, status_code=404)
+    accepted, result = _collection_controller.start(str(payload.get("source_id") or ""))
+    return JSONResponse(result, status_code=202 if accepted else 409)
 
 
 @app.get("/devices", response_class=HTMLResponse)

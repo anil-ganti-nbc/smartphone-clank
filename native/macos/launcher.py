@@ -7,6 +7,7 @@ import socket
 import sys
 import threading
 import webbrowser
+from contextlib import contextmanager
 from pathlib import Path
 
 APP_NAME = "Smartphone Clank"
@@ -55,6 +56,17 @@ def initialise_local_database(database_url: str) -> None:
     init_fresh_database(database_url)
 
 
+@contextmanager
+def working_directory(path: Path):
+    """Resolve bundled relative resources without leaving runtime state there."""
+    previous = Path.cwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
 def main() -> None:
     configure_field_test_runtime()
     root = resource_root()
@@ -66,7 +78,11 @@ def main() -> None:
         raise RuntimeError(f"Bundled configuration not found: {config_path}")
     from config.settings import load_settings
     settings = load_settings(str(config_path))
-    initialise_local_database(settings.database_url)
+    # alembic.ini intentionally uses ``script_location = alembic``. Finder
+    # supplies an arbitrary CWD, so resolve that read-only bundled resource
+    # from Contents/Resources, then restore the original CWD immediately.
+    with working_directory(root):
+        initialise_local_database(settings.database_url)
     from dashboard.app import create_app
     import uvicorn
     port = available_loopback_port()

@@ -1,5 +1,9 @@
 # Smartphone Intel Clank v0.2 — Evidence Engine
 
+> **Phase 0: UNVERIFIED_PRODUCTION — promotion frozen.** Repository state is
+> not proof of the deployed SHA, scheduler, database, notification authority,
+> backup, or rollback target; those facts remain `UNKNOWN` in the fleet ledger.
+
 > Status: Experimental / under construction
 
 **From model numbers to intelligence.**

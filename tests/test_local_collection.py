@@ -31,4 +31,31 @@ def test_dashboard_collection_endpoint_is_disabled_outside_field_test(tmp_path):
     assert client.get("/api/local-collection/status").status_code == 404
     assert client.post(
         "/api/local-collection/run", json={"source_id": "google_store_category_phones"}
-    ).status_code == 404
+    ).status_code == 403
+
+
+def test_dashboard_collection_endpoint_fails_closed_with_controller(tmp_path):
+    from fastapi.testclient import TestClient
+    from dashboard.app import create_app
+    from database.schema_guard import init_fresh_database
+
+    database_url = f"sqlite:///{tmp_path / 'clank-controller.db'}"
+    init_fresh_database(database_url)
+    client = TestClient(create_app(database_url, collection_controller=object()))
+    response = client.post(
+        "/api/local-collection/run", json={"source_id": "google_store_category_phones"}
+    )
+    assert response.status_code == 403
+
+
+def test_dashboard_host_validation_is_fail_closed():
+    from main import require_loopback_host
+
+    for host in ("127.0.0.1", "::1", "localhost"):
+        require_loopback_host(host)
+    for host in ("0.0.0.0", "::", "192.168.1.20", "bad host", ""):
+        try:
+            require_loopback_host(host)
+        except ValueError:
+            continue
+        raise AssertionError(f"unsafe host accepted: {host}")

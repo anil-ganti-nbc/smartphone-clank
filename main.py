@@ -6,6 +6,7 @@ CLI entry point.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
@@ -50,6 +51,17 @@ def _load_environment(config: str, environment: str):
 
 app = typer.Typer(help="Smartphone Intel Clank — Evidence Engine — smartphone intelligence")
 console = Console()
+
+
+def require_loopback_host(host: str) -> None:
+    try:
+        loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        loopback = host.lower() == "localhost"
+    if not loopback:
+        raise ValueError(
+            "Smartphone Clank has no authenticated remote dashboard profile; host must be loopback"
+        )
 
 
 def setup_logging(level: str = "INFO", log_file: str = "logs/clank.log"):
@@ -1124,8 +1136,11 @@ def dashboard(
     config: str = typer.Option("config/config.yaml"),
 ):
     """Launch local newsroom console (FastAPI + Jinja2)."""
-    if host not in ("127.0.0.1", "localhost", "::1"):
-        console.print("[bold red]WARNING: Binding outside loopback. Dashboard is not hardened for public exposure.[/bold red]")
+    try:
+        require_loopback_host(host)
+    except ValueError as exc:
+        console.print(f"[bold red]{exc}[/bold red]")
+        raise typer.Exit(2)
     settings = load_settings(config)
     try:
         from dashboard.app import create_app

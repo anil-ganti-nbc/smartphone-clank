@@ -126,10 +126,10 @@ def local_collection_status():
 
 @app.post("/api/local-collection/run")
 def local_collection_run(payload: dict = Body(...)):
-    if _collection_controller is None:
-        return JSONResponse({"error": "local_collection_unavailable"}, status_code=404)
-    accepted, result = _collection_controller.start(str(payload.get("source_id") or ""))
-    return JSONResponse(result, status_code=202 if accepted else 409)
+    return JSONResponse(
+        {"error": "authenticated_profile_required", "detail": "Phase 0 dashboard is read-only."},
+        status_code=403,
+    )
 
 
 @app.get("/devices", response_class=HTMLResponse)

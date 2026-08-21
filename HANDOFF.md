@@ -862,7 +862,7 @@ for full detail. Verdict: `HETZNER_SOAK_COMMISSIONED`.**
   GitHub-recoverability bugs found and fixed en route: missing `alembic` in
   `requirements.txt`, and `knowledge/data/` silently gitignored — both
   committed before deployment, both synced back to the Windows trees).
-- Production DB migrated via SQLite backup-API snapshot, SHA-256-verified
+- Production DB migrated via SQLite backup snapshot; SHA-256 checksum verified
   identical source/destination, zero data loss: 261 devices / 277 evidence
   / 129 alerts, unchanged through cutover.
 - Canonical suite on Hetzner: **181 passed, 0 failed**, matching Windows

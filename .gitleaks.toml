@@ -1,0 +1,34 @@
+title = "Smartphone Clank secret scanning policy"
+
+[[allowlists]]
+description = "Captured Samsung pages contain public client-side BOOMR telemetry identifiers."
+paths = [
+  '''^fixtures/samsung/live_samsung_us_galaxy_s24\.html$''',
+  '''^fixtures/samsung/live_samsung_us_zfold6\.html$''',
+  '''^fixtures/samsung/live_samsung_us_galaxy_a36_support\.html$''',
+  '''^fixtures/samsung/live_samsung_us_galaxy_s24_ultra\.html$''',
+  '''^fixtures/samsung/live_samsung_us_galaxy_s25_ultra_support\.html$''',
+]
+rules = ["generic-api-key"]
+regexTarget = "match"
+regexes = [
+  '''window\.BOOMR_API_key\s*=\s*["'][^"']+["']''',
+]
+
+[[allowlists]]
+description = "Empty example webhook variables must not be treated as a Discord secret."
+paths = ['''^\.env\.example$''']
+rules = ["discord-client-secret"]
+regexTarget = "match"
+regexes = [
+  '''DISCORD_WEBHOOK_URL=\s*\nMAINTENANCE_DISCORD_WEBHOOK_URL=\s*''',
+]
+
+[[allowlists]]
+description = "Historical handoff wording identifies a SHA-256 checksum, not a credential."
+paths = ['''^HANDOFF\.md$''']
+rules = ["generic-api-key"]
+regexTarget = "match"
+regexes = [
+  '''backup-API snapshot, SHA-256-verified''',
+]

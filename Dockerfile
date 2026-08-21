@@ -5,15 +5,14 @@
 # scheduler (cron/systemd timer) invokes this repeatedly; each invocation
 # checks every collector's due status against its own persisted run
 # history and runs whichever are due, then exits.
-FROM python:3.12-slim AS base
+FROM python:3.12-slim@sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a AS base
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin clank
 
 WORKDIR /app
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+COPY requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY . .
 # Do not ship the dev-only .venv or test caches into the image (also

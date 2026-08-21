@@ -21,6 +21,10 @@ def test_samsung_fixture_telemetry_values_are_inert() -> None:
     for name in FIXTURE_NAMES:
         text = (FIXTURE_DIR / name).read_text(encoding="utf-8")
         assert 'window.BOOMR_API_key="CLANK_FIXTURE_BOOMR_KEY"' in text
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert "DISCORD_WEBHOOK_URL=\nMAINTENANCE_DISCORD_WEBHOOK_URL=" not in env_example
+    handoff = (ROOT / "HANDOFF.md").read_text(encoding="utf-8")
+    assert "SHA-256 checksum verified" in handoff
 
 
 def test_gitleaks_still_detects_a_credential_shaped_value(tmp_path: Path) -> None:

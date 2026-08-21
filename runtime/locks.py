@@ -16,7 +16,12 @@ import json
 import os
 import socket
 from pathlib import Path
-from typing import IO
+from typing import IO, Any
+
+if os.name == "nt":
+    _windows_lock: Any = __import__("msvcrt")
+
+_WINDOWS_LOCK_OFFSET = 1 << 20
 
 
 class FileLock:
@@ -29,16 +34,13 @@ class FileLock:
         handle = self.path.open("a+", encoding="utf-8")
         try:
             if os.name == "nt":  # pragma: no cover - exercised on Windows hosts
-                import msvcrt
-
-                handle.seek(0)
-                if handle.read(1) == "":
-                    handle.write("\n")
-                    handle.flush()
-                handle.seek(0)
-                mode = msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK
+                # Lock outside the JSON metadata range. Windows denies reads and
+                # writes that overlap another handle's locked byte, which made a
+                # second contender fail before it could block or return False.
+                handle.seek(_WINDOWS_LOCK_OFFSET)
+                mode = _windows_lock.LK_LOCK if blocking else _windows_lock.LK_NBLCK
                 try:
-                    msvcrt.locking(handle.fileno(), mode, 1)
+                    _windows_lock.locking(handle.fileno(), mode, 1)
                 except OSError:
                     handle.close()
                     return False
@@ -72,10 +74,8 @@ class FileLock:
         self._file = None
         try:
             if os.name == "nt":  # pragma: no cover - exercised on Windows hosts
-                import msvcrt
-
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                handle.seek(_WINDOWS_LOCK_OFFSET)
+                _windows_lock.locking(handle.fileno(), _windows_lock.LK_UNLCK, 1)
             else:
                 import fcntl
 

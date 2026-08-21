@@ -37,12 +37,13 @@ def test_describe_registry():
     print("describe ok", rows)
 
 
-def test_sitemap_adapter_fixture_collect():
+def test_sitemap_adapter_fixture_collect(tmp_path):
     col = SamsungSitemapCollector(
         max_product_fetches=2,
         fixtures_dir=str(ROOT / "fixtures" / "samsung"),
         use_fixture_sitemap=True,
         min_delay=0.0,
+        database_url=f"sqlite:///{tmp_path / 'clank.db'}",
     )
     # force fixture path
     discoveries = col.collect()
@@ -52,8 +53,11 @@ def test_sitemap_adapter_fixture_collect():
 
 
 if __name__ == "__main__":
+    import tempfile
+
     test_sitemap_in_production_registry()
     test_legacy_support_disabled_by_default()
     test_describe_registry()
-    test_sitemap_adapter_fixture_collect()
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        test_sitemap_adapter_fixture_collect(Path(temporary_directory))
     print("All runtime registry tests passed")

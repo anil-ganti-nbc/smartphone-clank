@@ -1223,5 +1223,43 @@ def demo(
     raise typer.Exit(1)
 
 
+
+@app.command("qc-action")
+def qc_action(
+    action: str = typer.Option(..., help="Native action word: confirm | reject | "
+                                         "quarantine | promote | note"),
+    target_type: str = typer.Option(..., help="Entity type: device | evidence"),
+    target_id: str = typer.Option(..., help="Target entity id"),
+    reason: str = typer.Option("", help="Free-text operator rationale"),
+    config: str = typer.Option("config/config.yaml", "--config"),
+) -> None:
+    """M4.5 QC activation: record one human QC decision (analyst_actions).
+
+    Deliberately minimal: the native action word is preserved verbatim; no
+    fleet vocabulary imposed here. Motherclank ingests these rows read-only.
+    """
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    from config.settings import load_settings
+
+    settings = load_settings(config)
+    from database.session import get_engine
+    engine = get_engine(settings.database_url)
+    with engine.connect() as conn:
+        conn.exec_driver_sql(
+            "INSERT INTO analyst_actions (id, action, target_type, target_id,"
+            " actor_label, reason, before_state, after_state, related_evidence,"
+            " created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                str(_uuid.uuid4()), action.strip(), target_type.strip(),
+                target_id.strip(), "operator-cli", reason or None,
+                None, None, None,
+                datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            ),
+        )
+        conn.commit()
+    console.print(f"[green]recorded[/green] {action} {target_type}:{target_id}")
+
 if __name__ == "__main__":
     app()

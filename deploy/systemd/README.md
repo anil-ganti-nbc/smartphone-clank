@@ -60,3 +60,27 @@ Do not perform this procedure from an account that cannot act as root and the
 
 Any runtime change starts a new soak clock. Preserve the old database history;
 do not rebaseline.
+
+## SOAK collector (samsung_us_owners_product)
+
+`samsung_us_owners_product` is a soak-only source. It is reachable **only**
+through the staging path:
+
+```
+python -m runtime.run_once --environment staging --collector samsung_us_owners_product
+```
+
+- `smartphone-clank-soak@.service` runs that command with
+  `CLANK_CONFIG=config/config.staging.yaml` (the isolated `clank-staging.db`).
+- `smartphone-clank-soak@samsung_us_owners_product.timer` is the matching timer
+  (3h cadence, matching the source's `interval_minutes`).
+- **Neither file has an `[Install]` section**, so `systemctl enable
+  timers.target` will not auto-start the soak. The operator enables it
+  explicitly once soak is approved.
+- The `--environment staging` flag forces `build_staging_targets()`, which
+  (a) calls `assert_db_matches_environment(STAGING)` so a production DB cannot
+  be opened, and (b) is the only route that builds soak collectors.
+- Even against a staging DB with a configured channel, `alerts/source_maturity.py`
+  suppresses every `samsung_us_owners_product` delivery (fail-closed).
+- Production invocation (`--environment production`, the default) never builds
+  soak collectors, so the production timers above are unaffected.

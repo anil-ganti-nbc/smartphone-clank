@@ -23,7 +23,8 @@ from collectors import (
     build_collectors,
     production_scope,
 )
-from collectors.samsung_owners import MODEL_RE, SamsungOwnersCollector
+from collectors.samsung import SamsungModelValidator
+from collectors.samsung_owners import SamsungOwnersCollector
 
 
 PAGE_HTML_TEMPLATE = """
@@ -63,9 +64,44 @@ def _collector_with(pages: dict[str, str | Exception], monkeypatch) -> SamsungOw
 
 # -- parsing -------------------------------------------------------------------
 
-def test_model_regex_extracts_codes_from_static_html():
+def test_model_parser_extracts_codes_from_static_html():
+    # Uses the canonical SamsungModelValidator shared by all Samsung collectors,
+    # not a local regex. The regex previously capped the suffix at 10 chars and
+    # silently dropped current 11-char codes.
+    validator = SamsungModelValidator()
     html = _page("galaxy-s26", "S261")
-    assert sorted(m.upper() for m in MODEL_RE.findall(html)) == ["SM-S261U", "SM-S261X"]
+    assert validator.find_candidates(html) == ["SM-S261U", "SM-S261X"]
+
+
+def test_current_11_char_suffix_parses():
+    """Regression for DEFECT 2: SM-S928ULBEXAA has 11 chars after 'SM-'.
+    The old ``{4,10}`` cap matched nothing on the live page."""
+    validator = SamsungModelValidator()
+    page = """
+    <html><body>
+      <script>window.modelCode = 'SM-S928ULBEXAA';</script>
+      <div>Galaxy S24 Ultra Model Number: SM-S928ULBEXAA</div>
+    </body></html>
+    """
+    assert validator.find_candidates(page) == ["SM-S928ULBEXAA"]
+
+
+def test_case_insensitive_and_embedded_in_json():
+    validator = SamsungModelValidator()
+    blob = '{"models":["sm-s921u","SM-S928ULBEXAA"],"note":"see sm-g991b"}'
+    assert validator.find_candidates(blob) == ["SM-S921U", "SM-S928ULBEXAA", "SM-G991B"]
+
+
+def test_overlong_garbage_is_rejected():
+    """An exhaustively long 'SM-' string must not be scraped as a model."""
+    validator = SamsungModelValidator()
+    junk = "SM-" + "A" * 40
+    assert validator.find_candidates(junk) == []
+
+
+def test_malformed_sm_text_is_rejected():
+    validator = SamsungModelValidator()
+    assert validator.find_candidates("SM- AB1 and SM-- and SMM-1234 and SM-12!") == []
 
 
 def test_healthy_fetch_discovers_models_across_pages(monkeypatch):

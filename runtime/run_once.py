@@ -27,6 +27,7 @@ if str(ROOT) not in sys.path:
 os.chdir(ROOT)
 
 from runtime.daemon import setup_runtime_logging  # reuse, no duplication
+from runtime.environment import PRODUCTION, STAGING
 from runtime.locks import FileLock, lock_directory, safe_lock_name
 from runtime.provenance import source_revision
 
@@ -185,6 +186,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--force", action="store_true", help="ignore the due-check for the selected collector(s)"
     )
+    parser.add_argument(
+        "--environment",
+        choices=[PRODUCTION, STAGING],
+        default=PRODUCTION,
+        help=(
+            "Select the target environment. 'production' (default) builds only "
+            "accepted production collectors. 'staging' builds production collectors "
+            "PLUS soak-only sources (e.g. samsung_us_owners_product) and requires a "
+            "staging-labelled database via runtime/environment.py. Soak sources are "
+            "never reachable from a production invocation."
+        ),
+    )
     args = parser.parse_args(argv)
 
     log_dir = ROOT / "runtime" / "logs"
@@ -192,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
 
     config_path = os.environ.get("CLANK_CONFIG", "config/config.yaml")
     settings = load_settings(config_path)
-    log.info("startup source_revision=%s root=%s", source_revision(ROOT), ROOT)
+    log.info("startup source_revision=%s root=%s environment=%s", source_revision(ROOT), ROOT, args.environment)
     # See docs/infra/MIGRATION_AUDIT.md — this cloud one-shot entrypoint is a
     # production runtime path, same rule as runtime/daemon.py: refuse rather
     # than implicitly mutate schema.
@@ -204,13 +217,21 @@ def main(argv: list[str] | None = None) -> int:
     session_factory = get_session_factory(settings.database_url)
     pipeline = IntelligencePipeline(settings, session_factory)
 
+    # STAGING selects soak-inclusive targets (and self-enforces the staging
+    # DB guard); PRODUCTION selects production-only targets. No other path
+    # can reach soak collectors.
     try:
-        targets = build_targets(settings, pipeline, session_factory)
+        if args.environment == STAGING:
+            targets = build_staging_targets(settings, pipeline, session_factory)
+        else:
+            targets = build_targets(settings, pipeline, session_factory)
     except Exception:
-        log.exception("refusing to start: production target validation failed")
+        log.exception("refusing to start: target validation failed for environment=%s", args.environment)
         return 1
 
-    if not any(t.source_id == "samsung_us_support_sitemap" for t in targets):
+    if args.environment == PRODUCTION and not any(
+        t.source_id == "samsung_us_support_sitemap" for t in targets
+    ):
         log.error(
             "CRITICAL: samsung_us_support_sitemap not in production registry — "
             "discovery will not run. Check config and samsung_sources.yaml"

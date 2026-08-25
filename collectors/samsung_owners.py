@@ -24,14 +24,19 @@ row as evidence.
 from __future__ import annotations
 
 import logging
-import re
 
 from collectors.base import BaseCollector
+from collectors.samsung import SamsungModelValidator
 from models.schemas import Discovery, Manufacturer, SourceType
 
 logger = logging.getLogger("clank.collectors.samsung_owners")
 
-MODEL_RE = re.compile(r"\b(SM-[A-Z0-9]{4,10})\b", re.IGNORECASE)
+# Model matching is delegated to the canonical Samsung identifier parser
+# (collectors/samsung/model_validator.py). That module's ``find_re`` accepts
+# ``SM-[A-Z0-9]{3,16}`` (case-insensitive) and is the shared rule already used
+# by Samsung support/sitemap discovery, so the owners collector must not
+# maintain a competing regex (a previous ``{4,10}`` cap silently dropped
+# current 11-character suffixes such as ``SM-S928ULBEXAA``).
 # Owner-page slugs look like "galaxy-s24-ultra"; anything without a model
 # hint is still fetched (Samsung may publish an owners page pre-announcement)
 # but the slug is kept in raw evidence for provenance.
@@ -56,6 +61,7 @@ class SamsungOwnersCollector(BaseCollector):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._validator = SamsungModelValidator()
 
     def collect(self) -> list[Discovery]:
         discoveries: list[Discovery] = []
@@ -73,7 +79,9 @@ class SamsungOwnersCollector(BaseCollector):
                 continue
 
             text = resp.text
-            matches = [m.upper() for m in MODEL_RE.findall(text)]
+            # Canonical shared matcher: upper-cases and de-duplicates within a
+            # page. Cross-page de-duplication is handled by ``seen_models``.
+            matches = self._validator.find_candidates(text)
             page_models = []
             for model in matches:
                 if model in seen_models:

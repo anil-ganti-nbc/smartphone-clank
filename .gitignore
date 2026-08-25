@@ -25,3 +25,5 @@ __pycache__/
 
 # Local AI-tool config, not project content
 .claude/
+
+.venv312/

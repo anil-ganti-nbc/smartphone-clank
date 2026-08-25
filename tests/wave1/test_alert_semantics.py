@@ -110,7 +110,7 @@ def test_baseline_suppressed_writes_delivery_only():
     device = _device(session, confidence=80)  # comfortably above min_confidence
     alerter = _alerter(session, backfill=True, outcome="delivered")
 
-    msg_id = alerter.alert_new_device(device, session=session)
+    msg_id = alerter.alert_new_device(device, session=session, source_id="samsung_us_support_sitemap")
     if msg_id:
         alerter.record_alert(session, device, "new_device", "msg", msg_id)
     session.commit()
@@ -131,7 +131,7 @@ def test_missing_webhook_writes_delivery_only():
     alerter = DiscordAlerter(webhook_url="", enabled=True, session_factory=lambda: session)
     alerter.transport = _FakeTransport("missing_webhook")
 
-    msg_id = alerter.alert_new_device(device, session=session)
+    msg_id = alerter.alert_new_device(device, session=session, source_id="samsung_us_support_sitemap")
     if msg_id:
         alerter.record_alert(session, device, "new_device", "msg", msg_id)
     session.commit()
@@ -149,7 +149,7 @@ def test_discord_failure_writes_delivery_only():
     device = _device(session, confidence=80)
     alerter = _alerter(session, outcome="failed")
 
-    msg_id = alerter.alert_new_device(device, session=session)
+    msg_id = alerter.alert_new_device(device, session=session, source_id="samsung_us_support_sitemap")
     if msg_id:
         alerter.record_alert(session, device, "new_device", "msg", msg_id)
     session.commit()
@@ -169,7 +169,7 @@ def test_discord_success_writes_delivery_and_exactly_one_alert():
     device = _device(session, confidence=80)
     alerter = _alerter(session, outcome="delivered")
 
-    msg_id = alerter.alert_new_device(device, session=session)
+    msg_id = alerter.alert_new_device(device, session=session, source_id="samsung_us_support_sitemap")
     assert msg_id is not None
     alerter.record_alert(session, device, "new_device", "msg", msg_id)
     session.commit()

@@ -72,14 +72,21 @@ def build_targets(
     settings, pipeline, session_factory, *, project_root: Path = ROOT,
     run_reason: str = "production_scheduled",
 ) -> list[ScheduledTarget]:
-    """Build exactly the accepted production scope from both registries."""
+    """Build exactly the accepted production scope from both registries.
+
+    SOAK collectors (collectors.SOAK_SAMSUNG_SOURCE_IDS) are included only
+    when running against a staging environment: they have no promotion
+    record and can never be scheduled from a production runtime. Their
+    notification authority stays suppressed by policy regardless
+    (alerts/source_maturity.py), so even a staging misconfiguration cannot
+    reach production channels."""
     from collectors import build_collectors
     from collectors.wave1 import (
         assert_production_scope_or_refuse,
         build_wave1_production_collectors,
     )
     from collectors.wave1.staging_pipeline import run_oem_staging_cycle
-    from runtime.environment import PRODUCTION, assert_db_matches_environment
+    from runtime.environment import PRODUCTION, STAGING, assert_db_matches_environment
 
     assert_db_matches_environment(settings.database_url, PRODUCTION)
     assert_production_scope_or_refuse(settings)
@@ -104,6 +111,33 @@ def build_targets(
             interval_minutes=interval,
             run=lambda adapter=adapter: run_oem_staging_cycle(
                 adapter, pipeline, session_factory, run_reason=run_reason
+            ),
+        ))
+    return targets
+
+
+def build_staging_targets(
+    settings, pipeline, session_factory, *, project_root: Path = ROOT,
+    run_reason: str = "staging_scheduled",
+) -> list[ScheduledTarget]:
+    """Staging-environment one-shot targets: production scope PLUS soak
+    collectors. Refuses a non-staging database (same guard as production)."""
+    from collectors import build_collectors
+    from runtime.environment import STAGING, assert_db_matches_environment
+
+    assert_db_matches_environment(settings.database_url, STAGING)
+
+    targets: list[ScheduledTarget] = []
+    collectors_cfg = settings.get("collectors", default={}) or {}
+    for collector in build_collectors(
+        settings, project_root=project_root, include_soak=True
+    ):
+        interval = int((collectors_cfg.get(collector.name) or {}).get("interval_minutes") or 180)
+        targets.append(ScheduledTarget(
+            source_id=collector.name,
+            interval_minutes=interval,
+            run=lambda collector=collector: pipeline.run_collector(
+                collector, run_reason=run_reason
             ),
         ))
     return targets

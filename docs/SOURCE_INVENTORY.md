@@ -19,6 +19,21 @@ question.
 | Oppo | `oppo.com/en/sitemap.xml` | Global/EN | DISCOVERY | LIVE_VALIDATED, **PRODUCTION** | 2026-08-11 (canary revalidation) | 360 min (4 polls/day) | **YES — PROMOTED 2026-08-11**, see `docs/wave2/OPPO_CANARY_REPORT.md` | Letter-suffix A-series/Reno variants (A17k, Reno7 Z) undercounted via fail-closed AMBIGUOUS |
 | Realme | `realme.com/sitemap-{in,eu}.xml` | India + EU | DISCOVERY | LIVE_VALIDATED, **PRODUCTION** | 2026-08-11 (canary revalidation) | 360 min (4 polls/day) | **YES — PROMOTED 2026-08-11**, see `docs/wave2/REALME_CANARY_REPORT.md` | P-series and some suffix variants (14t/15t/15x) undercounted via fail-closed AMBIGUOUS; promo-text risk confirmed on landing pages only, not sitemap |
 
+## Soak
+
+Sources implemented and validated against live surfaces but holding NO
+production promotion record. Excluded from production scheduling by
+`collectors.SOAK_SAMSUNG_SOURCE_IDS` / `RUNNABLE_SAMSUNG_SOURCE_IDS`;
+runnable only via staging one-shot targets
+(`runtime.run_once.build_staging_targets`). Notification authority is
+suppressed by policy regardless of environment (`alerts/source_maturity.py`,
+fail-closed): every suppressed newsroom decision leaves a
+`WebhookDelivery` evidence row.
+
+| OEM | Source | Region | Role | State | Last live validation | Cadence | Production? | Known limitation |
+|---|---|---|---|---|---|---|---|---|
+| Samsung | `samsung.com/us/support/owners/product/<slug>` (`collectors/samsung_owners.py`) | US | DISCOVERY (pre-announcement support surface) | LIVE_VALIDATED, **SOAK** | 2026-08-02 (seed paths, registry) | 180 min (staging) | NO — soak, promotion requires explicit record | Seed-path based discovery; new-model slugs must be added to `samsung_sources.yaml` seeds |
+
 ## Research / held
 
 | OEM | Source | Region | Role | State | Last live validation | Cadence | Production? | Known limitation |

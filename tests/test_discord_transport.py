@@ -198,7 +198,7 @@ def test_newsroom_and_maintenance_routing_separation():
         return _FakeResponse(204)
 
     with patch("httpx.Client.post", new=fake_post):
-        newsroom._send("hello", reason="new_model")
+        newsroom._send("hello", reason="new_model", source_id="samsung_us_support_sitemap")
         maintenance.alert(source_id="s1", problem="db_integrity_failure", detail="d", reason="db_integrity_failure")
         session.commit()
 

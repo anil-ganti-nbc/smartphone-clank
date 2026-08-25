@@ -10,6 +10,7 @@ from typing import Optional
 
 from alerts.delivery import DeliveryResult, WebhookTransport
 from alerts.eligibility import newsroom_eligible
+from alerts.source_maturity import MATURITY_SOAK, source_maturity
 from database.models import Alert, Device, WebhookDelivery
 
 logger = logging.getLogger("clank.alerts")
@@ -30,6 +31,20 @@ def _reason_for_source(source: Optional[str]) -> str:
             if hint in low:
                 return reason
     return "support_page_change"
+
+
+def _device_source(device: Device) -> Optional[str]:
+    """Best-effort source id for the maturity gate: the device's most
+    recent evidence row's source (id order = insertion order). The pipeline
+    normally supplies the authoritative source explicitly; this fallback
+    keeps direct alerter callers gated."""
+    try:
+        evidence = list(device.evidence)
+    except Exception:
+        return None
+    if not evidence:
+        return None
+    return max(evidence, key=lambda e: e.id).source
 
 
 class DiscordAlerter:
@@ -63,6 +78,7 @@ class DiscordAlerter:
         *,
         reason: str = "support_page_change",
         extra_eligible: bool = True,
+        source_id: Optional[str] = None,
         session=None,
     ) -> Optional[str]:
         """Always records a `WebhookDelivery` row (via `_record_delivery`
@@ -73,6 +89,13 @@ class DiscordAlerter:
         threshold) that `newsroom_eligible(reason, ...)` doesn't know about;
         it is AND-ed with the normal reason/backfill/enabled checks, not a
         replacement for them.
+
+        `source_id` folds in the source-maturity gate
+        (`alerts/source_maturity.py`): a source whose maturity is `soak`
+        can never reach the newsroom channel, regardless of environment or
+        webhook configuration — suppression is explicit policy with a
+        persisted evidence row (suppressed=1), never an absent credential.
+        Absent source ids are fail-closed (treated as soak).
 
         `session`, when given (the pipeline always passes its own), is
         reused for the WebhookDelivery write instead of opening a second
@@ -91,11 +114,24 @@ class DiscordAlerter:
         `Alert` row must only ever be written when this returns non-None."""
         if self.staging_label:
             content = "🧪 **STAGING — NOT A PRODUCTION ALERT**\n" + content
-        eligible = extra_eligible and self.enabled and newsroom_eligible(reason, backfill=self.backfill)
+        maturity = source_maturity(source_id)
+        if source_id and maturity == MATURITY_SOAK:
+            logger.warning(
+                "newsroom send suppressed by source maturity: source=%s maturity=soak reason=%s",
+                source_id, reason,
+            )
+        eligible = (
+            extra_eligible
+            and self.enabled
+            and maturity != MATURITY_SOAK
+            and newsroom_eligible(reason, backfill=self.backfill)
+        )
         payload = {"content": content}
         if embeds:
             payload["embeds"] = embeds
-        result = self.transport.send(payload, eligible=eligible, suppressed=not self.enabled)
+        result = self.transport.send(
+            payload, eligible=eligible, suppressed=(not self.enabled) or maturity == MATURITY_SOAK
+        )
         self._record_delivery(reason, result, dedupe_key=None, session=session)
         return "sent" if result.delivered else None
 
@@ -157,6 +193,7 @@ class DiscordAlerter:
         device: Device,
         timeline: list | None = None,
         knowledge_bits: dict | None = None,
+        source_id: str | None = None,
         session=None,
     ) -> Optional[str]:
         reason = "new_model"
@@ -186,7 +223,8 @@ class DiscordAlerter:
         if device.first_seen:
             lines.append(f"First seen: {device.first_seen.strftime('%Y-%m-%d %H:%M UTC')}")
 
-        return self._send("\n".join(lines), reason=reason, extra_eligible=confidence_met, session=session)
+        return self._send("\n".join(lines), reason=reason, extra_eligible=confidence_met,
+                          source_id=source_id or _device_source(device), session=session)
 
     def alert_device_updated(
         self,
@@ -222,7 +260,8 @@ class DiscordAlerter:
         if link:
             lines.append(f"Link: {link}")
 
-        return self._send("\n".join(lines), reason=reason, extra_eligible=significant, session=session)
+        return self._send("\n".join(lines), reason=reason, extra_eligible=significant,
+                          source_id=new_source or _device_source(device), session=session)
 
     def alert_confidence_up(self, device: Device, old_confidence: int, new_source: str | None = None) -> Optional[str]:
         return self.alert_device_updated(device, old_confidence, new_source=new_source)

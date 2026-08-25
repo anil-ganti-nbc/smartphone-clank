@@ -211,7 +211,8 @@ class IntelligencePipeline:
             if is_new:
                 new_count += 1
                 session.flush()
-                msg_id = self.alerter.alert_new_device(device, timeline=tl, knowledge_bits=kb_bits, session=session)
+                msg_id = self.alerter.alert_new_device(device, timeline=tl, knowledge_bits=kb_bits, session=session,
+                                                       source_id=disc.source)
                 if msg_id:
                     self.alerter.record_alert(
                         session, device, "new_device",

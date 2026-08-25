@@ -19,6 +19,7 @@ from collectors.samsung_support import SamsungSupportCollector
 from collectors.samsung.sitemap_collector import SamsungSitemapCollector
 from collectors.generic_support import GenericSupportCollector
 from collectors.firmware import SamsungFirmwareCollector, PixelOTACollector, NothingOTACollector
+from collectors.samsung_owners import SamsungOwnersCollector
 
 logger = logging.getLogger("clank.collectors")
 
@@ -54,6 +55,14 @@ def _source_entries(samsung_cfg: dict) -> dict[str, dict]:
 # "validated" describes the source, not the existence of a runnable collector.
 # production_scope() must never advertise a source nothing can actually run.
 RUNNABLE_SAMSUNG_SOURCE_IDS = {"samsung_us_support_sitemap", "samsung_support"}
+
+# SOAK sources: implemented, validated against live surfaces, but holding NO
+# production promotion record. They are excluded from RUNNABLE (so production
+# scope can never execute them) and are only registered when a caller passes
+# include_soak=True — wired for staging environments in runtime/run_once.py.
+# Notification authority stays suppressed by policy regardless of environment:
+# see alerts/source_maturity.py.
+SOAK_SAMSUNG_SOURCE_IDS = {"samsung_us_owners_product"}
 
 
 def production_scope(settings, project_root: Path | None = None) -> set[str]:
@@ -122,6 +131,7 @@ def build_collectors(
     settings,
     *,
     allow_partial: bool = False,
+    include_soak: bool = False,
     project_root: Path | None = None,
 ) -> list[BaseCollector]:
     collectors_cfg = settings.get("collectors", default={}) or {}
@@ -210,6 +220,28 @@ def build_collectors(
             registry.append(col)
     else:
         skipped.append(("samsung_*", "kill_switch"))
+
+    if include_soak and not kill:
+        for soak_id in sorted(SOAK_SAMSUNG_SOURCE_IDS):
+            src = sources.get(soak_id) or {}
+            status = (src.get("validation_status") or "").upper()
+            cfg = collectors_cfg.get(soak_id) or {}
+            if src.get("enabled") is not True:
+                skipped.append((soak_id, "soak_disabled_in_registry"))
+                continue
+            if status not in SAFE_LIVE_STATUSES | OPTIONAL_PARTIAL:
+                skipped.append((soak_id, f"soak_status_not_allowed:{status}"))
+                continue
+            col = SamsungOwnersCollector(
+                **common,
+                timeout=cfg.get("timeout", 30),
+                max_retries=cfg.get("max_retries", 3),
+            )
+            col.capability = "discovery"  # type: ignore[attr-defined]
+            col.validation_status = status  # type: ignore[attr-defined]
+            col.maturity = "soak"  # type: ignore[attr-defined]
+            registry.append(col)
+            logger.info("Registered SOAK collector: %s (%s) — notifications suppressed by policy", soak_id, status)
 
     add("bluetooth_sig", BluetoothSIGCollector, manufacturers=manufacturers)
     add("samsung_firmware", SamsungFirmwareCollector)

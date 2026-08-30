@@ -24,6 +24,7 @@ from alerts.discord import DiscordAlerter
 from alerts.source_maturity import (
     MATURITY_PRODUCTION,
     MATURITY_SOAK,
+    PRODUCTION_SOURCES,
     notifications_allowed,
     source_maturity,
 )
@@ -83,6 +84,19 @@ def test_unknown_and_absent_sources_fail_closed_to_soak():
     assert source_maturity("samsung_us_owners_product") == MATURITY_SOAK
     assert source_maturity(None) == MATURITY_SOAK
     assert notifications_allowed(None) is False
+
+
+def test_canary_stage_confers_no_notification_authority():
+    """CANARY (since 2026-08-30) means production execution with the source
+    still absent from PRODUCTION_SOURCES: fail-closed soak classification
+    suppresses every newsroom send. Only a reviewed edit to this registry —
+    not the canary transition itself — grants authority (Fleet Law 8)."""
+    from collectors import CANARY_SAMSUNG_SOURCE_IDS
+
+    assert "samsung_us_owners_product" in CANARY_SAMSUNG_SOURCE_IDS
+    assert CANARY_SAMSUNG_SOURCE_IDS & PRODUCTION_SOURCES == set()
+    assert source_maturity("samsung_us_owners_product") == MATURITY_SOAK
+    assert notifications_allowed("samsung_us_owners_product") is False
 
 
 # -- suppression evidence ---------------------------------------------------------

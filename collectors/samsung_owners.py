@@ -1,24 +1,28 @@
-"""Samsung US Owners product-page collector — SOAK / EXPERIMENTAL.
+"""Samsung US Owners product-page collector — CANARY (promoted from SOAK 2026-08-30).
 
 source_id ``samsung_us_owners_product``. Declared LIVE_VALIDATED in
-config/samsung_sources.yaml (seed paths validated live 2026-08-02) but it
-has no production promotion record, so it is deliberately absent from
-``RUNNABLE_SAMSUNG_SOURCE_IDS``: production scheduling can never execute
-it. It runs only where soak execution is explicitly enabled
-(``build_collectors(..., include_soak=True)``, wired for staging
-environments in runtime/run_once.py).
+config/samsung_sources.yaml (seed paths validated live 2026-08-02). SOAK
+history: implemented 2026-08-25, staging baseline 2026-08-26 03:48Z, then 32
+clean repeat cycles (zero new devices, zero failures) — promoted to CANARY
+per docs/infra/SAMSUNG_US_OWNERS_PRODUCT_CANARY_REPORT.md.
+
+CANARY semantics (docs/ENGINEERING_PRINCIPLES.md Rule 7 lifecycle: STAGING →
+BASELINE → REPEATABILITY → CANARY → PRODUCTION): the collector now runs in
+real production execution — registered via
+``collectors.CANARY_SAMSUNG_SOURCE_IDS`` (a reviewed code gate, Fleet Law 8),
+``RUNNABLE_SAMSUNG_SOURCE_IDS``, and the production per-source timer
+``smartphone-clank-source@samsung_us_owners_product.timer`` — against the
+production config/DB. It does NOT hold production notification authority:
+``alerts/source_maturity.py`` still classifies it soak (fail-closed; only an
+explicit, reviewed edit there grants authority), so every newsroom decision
+is suppressed with a persisted ``WebhookDelivery`` evidence row. Canary is
+not production.
 
 Signal rationale (Class A OEM surface): owner/product support pages are
 published per-model and frequently appear BEFORE marketing/catalogue
 surfaces for unannounced models, with static HTML containing SM- model
 codes — genuinely distinct pre-announcement signal from the support
 sitemap collector.
-
-Notification authority: ``alerts/source_maturity.py`` classifies this
-source as soak (fail-closed default), so even if its discoveries were
-processed against a production database with a configured webhook, the
-newsroom gate suppresses every send and records the suppressed delivery
-row as evidence.
 """
 
 from __future__ import annotations

@@ -61,26 +61,49 @@ Do not perform this procedure from an account that cannot act as root and the
 Any runtime change starts a new soak clock. Preserve the old database history;
 do not rebaseline.
 
-## SOAK collector (samsung_us_owners_product)
+## SOAK collector stage (generic mechanism)
 
-`samsung_us_owners_product` is a soak-only source. It is reachable **only**
-through the staging path:
+`smartphone-clank-soak@.service` is the generic opt-in soak mechanism: it
+runs `python -m runtime.run_once --environment staging --collector <source>`
+with `CLANK_CONFIG=config/config.staging.yaml` (the isolated
+`clank-staging.db`). It has **no `[Install]` section**, so an operator
+enables a `smartphone-clank-soak@<source>.timer` instance explicitly once a
+source's soak is approved.
 
-```
-python -m runtime.run_once --environment staging --collector samsung_us_owners_product
-```
+- `--environment staging` forces `build_staging_targets()`, which (a) calls
+  `assert_db_matches_environment(STAGING)` so a production DB cannot be
+  opened, and (b) is the only route that builds soak collectors
+  (`collectors.SOAK_SAMSUNG_SOURCE_IDS`, currently empty).
+- `alerts/source_maturity.py` suppresses every newsroom send for a
+  not-yet-promoted source (fail-closed), regardless of environment.
 
-- `smartphone-clank-soak@.service` runs that command with
-  `CLANK_CONFIG=config/config.staging.yaml` (the isolated `clank-staging.db`).
-- `smartphone-clank-soak@samsung_us_owners_product.timer` is the matching timer
-  (3h cadence, matching the source's `interval_minutes`).
-- **Neither file has an `[Install]` section**, so `systemctl enable
-  timers.target` will not auto-start the soak. The operator enables it
-  explicitly once soak is approved.
-- The `--environment staging` flag forces `build_staging_targets()`, which
-  (a) calls `assert_db_matches_environment(STAGING)` so a production DB cannot
-  be opened, and (b) is the only route that builds soak collectors.
-- Even against a staging DB with a configured channel, `alerts/source_maturity.py`
-  suppresses every `samsung_us_owners_product` delivery (fail-closed).
-- Production invocation (`--environment production`, the default) never builds
-  soak collectors, so the production timers above are unaffected.
+## CANARY (samsung_us_owners_product, since 2026-08-30)
+
+After completing its staging soak (baseline 2026-08-26 03:48Z + 32 clean
+repeat cycles, zero failures — see
+`docs/infra/SAMSUNG_US_OWNERS_PRODUCT_CANARY_REPORT.md`),
+`samsung_us_owners_product` was promoted SOAK → CANARY:
+
+- The retired `smartphone-clank-soak@samsung_us_owners_product.timer`
+  (staging) is replaced by the production per-source timer
+  `smartphone-clank-samsung_us_owners_product.timer` →
+  `smartphone-clank-source@.service` → production `config/config.yaml` and
+  the production DB. Cadence is unchanged (3h).
+- CANARY still has **no notification authority**: the source is absent from
+  `alerts/source_maturity.py::PRODUCTION_SOURCES` (fail-closed soak
+  classification), so every newsroom decision in production is suppressed
+  with a `WebhookDelivery` evidence row. Full production requires the
+  separate, reviewed edit to that module (Fleet Law 8).
+- The production invocation's first run is a fresh baseline against the
+  production DB (no state carries over from staging). Expect suppressed
+  (never delivered) new-device decisions; see the canary report's baseline
+  expectations.
+- Rollback: `systemctl disable --now
+  smartphone-clank-samsung_us_owners_product.timer` (re-enable the soak
+  timer only via a reviewed revert). No data is deleted by disabling.
+
+## Production invocation defaults
+
+Production invocation (`--environment production`, the default) builds only
+accepted production/canary collectors; soak sources are never reachable from
+it (`tests/test_run_once_environment.py` pins this).

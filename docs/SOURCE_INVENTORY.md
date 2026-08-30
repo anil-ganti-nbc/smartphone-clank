@@ -18,6 +18,7 @@ question.
 | Honor | `honor.com/global/sitemap.xml` | Global (int'l storefront) | DISCOVERY | LIVE_VALIDATED, **PRODUCTION** | 2026-08-11 (canary revalidation) | 360 min (4 polls/day) | **YES — PROMOTED 2026-08-11**, see `docs/wave2/HONOR_CANARY_REPORT.md` | `/cn/` locale (much larger, older) not evaluated; X-series naming grammar incomplete in validator |
 | Oppo | `oppo.com/en/sitemap.xml` | Global/EN | DISCOVERY | LIVE_VALIDATED, **PRODUCTION** | 2026-08-11 (canary revalidation) | 360 min (4 polls/day) | **YES — PROMOTED 2026-08-11**, see `docs/wave2/OPPO_CANARY_REPORT.md` | Letter-suffix A-series/Reno variants (A17k, Reno7 Z) undercounted via fail-closed AMBIGUOUS |
 | Realme | `realme.com/sitemap-{in,eu}.xml` | India + EU | DISCOVERY | LIVE_VALIDATED, **PRODUCTION** | 2026-08-11 (canary revalidation) | 360 min (4 polls/day) | **YES — PROMOTED 2026-08-11**, see `docs/wave2/REALME_CANARY_REPORT.md` | P-series and some suffix variants (14t/15t/15x) undercounted via fail-closed AMBIGUOUS; promo-text risk confirmed on landing pages only, not sitemap |
+| Samsung | `samsung.com/us/support/owners/product/<slug>` (`collectors/samsung_owners.py`) | US | DISCOVERY (pre-announcement support surface) | LIVE_VALIDATED, **CANARY** | 2026-08-02 (seed paths, registry); soak cycles through 2026-08-30 | 180 min (production canary) | CANARY — production execution, notifications suppressed; full promotion requires an explicit `alerts/source_maturity.py` record, see `docs/infra/SAMSUNG_US_OWNERS_PRODUCT_CANARY_REPORT.md` | Seed-path based discovery; new-model slugs must be added to `samsung_sources.yaml` seeds; one seed (`galaxy-a55-5g`) now redirects to a code-less generic support page |
 
 ## Soak
 
@@ -30,9 +31,13 @@ suppressed by policy regardless of environment (`alerts/source_maturity.py`,
 fail-closed): every suppressed newsroom decision leaves a
 `WebhookDelivery` evidence row.
 
+(Empty since 2026-08-30 — `samsung_us_owners_product` completed its soak:
+staging baseline 2026-08-26 03:48Z, then 32 clean repeat cycles with zero
+new devices and zero failures, and was promoted SOAK → CANARY. See
+`docs/infra/SAMSUNG_US_OWNERS_PRODUCT_CANARY_REPORT.md`.)
+
 | OEM | Source | Region | Role | State | Last live validation | Cadence | Production? | Known limitation |
 |---|---|---|---|---|---|---|---|---|
-| Samsung | `samsung.com/us/support/owners/product/<slug>` (`collectors/samsung_owners.py`) | US | DISCOVERY (pre-announcement support surface) | LIVE_VALIDATED, **SOAK** | 2026-08-02 (seed paths, registry) | 180 min (staging) | NO — soak, promotion requires explicit record | Seed-path based discovery; new-model slugs must be added to `samsung_sources.yaml` seeds |
 
 ## Research / held
 

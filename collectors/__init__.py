@@ -51,10 +51,18 @@ def _source_entries(samsung_cfg: dict) -> dict[str, dict]:
 
 # Samsung source IDs that actually have a wired collector implementation in
 # build_collectors() below. A source can be LIVE_VALIDATED in samsung_sources.yaml
-# and still have no code behind it (e.g. samsung_us_owners_product) — being
-# "validated" describes the source, not the existence of a runnable collector.
+# and still have no code behind it — being "validated" describes the source,
+# not the existence of a runnable collector.
 # production_scope() must never advertise a source nothing can actually run.
-RUNNABLE_SAMSUNG_SOURCE_IDS = {"samsung_us_support_sitemap", "samsung_support"}
+RUNNABLE_SAMSUNG_SOURCE_IDS = {
+    "samsung_us_support_sitemap",
+    "samsung_support",
+    # CANARY since 2026-08-30 (docs/infra/SAMSUNG_US_OWNERS_PRODUCT_CANARY_REPORT.md):
+    # real collector implementation + LIVE_VALIDATED registry entry, approved for
+    # production execution under observation — NOT production notification
+    # authority (alerts/source_maturity.py still classifies it soak, fail-closed).
+    "samsung_us_owners_product",
+}
 
 # SOAK sources: implemented, validated against live surfaces, but holding NO
 # production promotion record. They are excluded from RUNNABLE (so production
@@ -62,7 +70,18 @@ RUNNABLE_SAMSUNG_SOURCE_IDS = {"samsung_us_support_sitemap", "samsung_support"}
 # include_soak=True — wired for staging environments in runtime/run_once.py.
 # Notification authority stays suppressed by policy regardless of environment:
 # see alerts/source_maturity.py.
-SOAK_SAMSUNG_SOURCE_IDS = {"samsung_us_owners_product"}
+# Empty since 2026-08-30: samsung_us_owners_product completed its soak
+# (baseline + 32 clean repeat cycles, zero failures) and moved to CANARY —
+# see docs/infra/SAMSUNG_US_OWNERS_PRODUCT_CANARY_REPORT.md.
+SOAK_SAMSUNG_SOURCE_IDS: set[str] = set()
+
+# CANARY sources: implemented, LIVE_VALIDATED, approved for real production
+# execution (per-source systemd timers, production config/DB) while holding NO
+# production notification authority. Membership here is a reviewed code change
+# (Fleet Law 8: promotion gates) — never a config flip. Full production —
+# notification authority — requires the separate, explicit edit to
+# alerts/source_maturity.py::PRODUCTION_SOURCES. Canary != production.
+CANARY_SAMSUNG_SOURCE_IDS = {"samsung_us_owners_product"}
 
 
 def production_scope(settings, project_root: Path | None = None) -> set[str]:
@@ -242,6 +261,36 @@ def build_collectors(
             col.maturity = "soak"  # type: ignore[attr-defined]
             registry.append(col)
             logger.info("Registered SOAK collector: %s (%s) — notifications suppressed by policy", soak_id, status)
+
+    # CANARY sources run in real production execution (production config/DB,
+    # per-source systemd timers) while notification authority stays suppressed
+    # by alerts/source_maturity.py until the reviewed full-promotion edit.
+    # Membership in CANARY_SAMSUNG_SOURCE_IDS is itself the reviewed gate.
+    if not kill:
+        for canary_id in sorted(CANARY_SAMSUNG_SOURCE_IDS):
+            src = sources.get(canary_id) or {}
+            status = (src.get("validation_status") or "").upper()
+            cfg = collectors_cfg.get(canary_id) or {}
+            if src.get("enabled") is not True:
+                skipped.append((canary_id, "canary_disabled_in_registry"))
+                continue
+            if status not in SAFE_LIVE_STATUSES:
+                skipped.append((canary_id, f"canary_status_not_allowed:{status}"))
+                continue
+            col = SamsungOwnersCollector(
+                **common,
+                timeout=cfg.get("timeout", 30),
+                max_retries=cfg.get("max_retries", 3),
+            )
+            col.capability = "discovery"  # type: ignore[attr-defined]
+            col.validation_status = status  # type: ignore[attr-defined]
+            col.maturity = "canary"  # type: ignore[attr-defined]
+            registry.append(col)
+            logger.info(
+                "Registered CANARY collector: %s (%s) — production execution, "
+                "notifications suppressed by policy (alerts/source_maturity.py)",
+                canary_id, status,
+            )
 
     add("bluetooth_sig", BluetoothSIGCollector, manufacturers=manufacturers)
     add("samsung_firmware", SamsungFirmwareCollector)

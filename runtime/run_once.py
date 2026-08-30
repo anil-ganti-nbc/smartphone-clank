@@ -75,12 +75,15 @@ def build_targets(
 ) -> list[ScheduledTarget]:
     """Build exactly the accepted production scope from both registries.
 
-    SOAK collectors (collectors.SOAK_SAMSUNG_SOURCE_IDS) are included only
-    when running against a staging environment: they have no promotion
-    record and can never be scheduled from a production runtime. Their
-    notification authority stays suppressed by policy regardless
-    (alerts/source_maturity.py), so even a staging misconfiguration cannot
-    reach production channels."""
+    CANARY sources (collectors.CANARY_SAMSUNG_SOURCE_IDS, e.g.
+    samsung_us_owners_product) build here by default — canary means real
+    production execution under observation — but hold NO notification
+    authority: alerts/source_maturity.py still suppresses their newsroom
+    sends (fail-closed) until the reviewed full-promotion edit.
+    SOAK collectors (collectors.SOAK_SAMSUNG_SOURCE_IDS, currently empty) are
+    included only when running against a staging environment
+    (build_staging_targets); they have no promotion record and can never be
+    scheduled from a production runtime."""
     from collectors import build_collectors
     from collectors.wave1 import (
         assert_production_scope_or_refuse,

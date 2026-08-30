@@ -26,18 +26,25 @@ def _load(config_file: str):
     return load_settings(f"config/{config_file}")
 
 
-def test_staging_build_includes_soak_collector():
-    settings = _load("config.staging.yaml")
-    targets = run_once.build_staging_targets(settings, None, None)
+def test_production_build_includes_canary_source():
+    """CANARY (samsung_us_owners_product, since 2026-08-30) builds in the
+    production target list — canary means real production execution under
+    observation. Notification authority stays suppressed by
+    alerts/source_maturity.py regardless."""
+    settings = _load("config.yaml")  # production DB path
+    targets = run_once.build_targets(settings, None, None)
     ids = {t.source_id for t in targets}
     assert "samsung_us_owners_product" in ids
 
 
-def test_production_build_excludes_soak_collector():
-    settings = _load("config.yaml")  # production DB path
-    targets = run_once.build_targets(settings, None, None)
+def test_staging_build_route_remains_soak_inclusive_and_guards_db():
+    """The staging builder still works and still self-enforces the staging
+    DB guard. samsung_us_owners_product appears here via the canary block
+    (default build), not via the now-empty soak set."""
+    settings = _load("config.staging.yaml")
+    targets = run_once.build_staging_targets(settings, None, None)
     ids = {t.source_id for t in targets}
-    assert "samsung_us_owners_product" not in ids
+    assert "samsung_us_owners_product" in ids
 
 
 def test_staging_builder_rejects_production_db_path():
@@ -119,8 +126,8 @@ def test_production_default_does_not_use_soak_builder(monkeypatch):
 
 
 def test_unknown_collector_fails_closed(monkeypatch):
-    """An unknown --collector (incl. a soak id under production) returns the
-    unknown-collector exit code; no soak target is silently created."""
+    """An unknown --collector id returns the unknown-collector exit code;
+    nothing is silently created for it."""
     monkeypatch.setattr("database.schema_guard.ensure_schema_or_refuse", lambda *a, **k: None)
     monkeypatch.setattr("database.session.get_session_factory", lambda *a, **k: None)
     monkeypatch.setattr("pipeline.IntelligencePipeline", lambda *a, **k: None)
@@ -135,8 +142,30 @@ def test_unknown_collector_fails_closed(monkeypatch):
     monkeypatch.setattr(run_once, "build_targets", lambda *a, **k: [FakeTarget()])
     monkeypatch.setattr(run_once, "run_target", lambda *a, **k: "ran")
 
-    rc = run_once.main(["--collector", "samsung_us_owners_product", "--force"])
+    rc = run_once.main(["--collector", "samsung_us_owners_product_typo", "--force"])
     assert rc == run_once.EXIT_UNKNOWN_COLLECTOR
+
+
+def test_canary_collector_is_selectable_in_production(monkeypatch):
+    """The canary source resolves through the production builder — the route
+    the production per-source timer
+    (smartphone-clank-source@samsung_us_owners_product.service) takes."""
+    monkeypatch.setattr("database.schema_guard.ensure_schema_or_refuse", lambda *a, **k: None)
+    monkeypatch.setattr("database.session.get_session_factory", lambda *a, **k: None)
+    monkeypatch.setattr("pipeline.IntelligencePipeline", lambda *a, **k: None)
+
+    class FakeTarget:
+        source_id = "samsung_us_owners_product"
+        interval_minutes = 180
+
+        def run(self):
+            return None
+
+    monkeypatch.setattr(run_once, "build_targets", lambda *a, **k: [FakeTarget()])
+    monkeypatch.setattr(run_once, "run_target", lambda *a, **k: "ran")
+
+    rc = run_once.main(["--collector", "samsung_us_owners_product", "--force"])
+    assert rc == run_once.EXIT_OK
 
 
 def test_soak_source_notification_suppressed_regardless_of_enabled_config():

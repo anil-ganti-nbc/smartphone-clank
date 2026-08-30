@@ -171,19 +171,51 @@ def test_stable_rerun_produces_identical_discovery_hashes(monkeypatch):
 
 # -- registry gating ---------------------------------------------------------------
 
-def test_soak_source_is_never_in_production_scope():
+def test_soak_set_is_empty_after_canary_promotion():
+    """samsung_us_owners_product left the soak stage on 2026-08-30 (32 clean
+    repeat cycles). The generic soak mechanism stays available (empty set)
+    for future sources."""
+    assert SOAK_SAMSUNG_SOURCE_IDS == set()
+
+
+def test_canary_source_is_in_production_scope():
+    """CANARY means real production execution: production_scope() includes the
+    source (LIVE_VALIDATED in samsung_sources.yaml + runnable implementation),
+    so the per-source production timer can run it. This is the deliberate,
+    reviewed scope expansion — never a config flip."""
     from config.settings import load_settings
 
     settings = load_settings("config/config.yaml")
     scope = production_scope(settings, project_root=ROOT)
     assert scope is not None
-    assert "samsung_us_owners_product" not in scope
+    assert "samsung_us_owners_product" in scope
     assert SOAK_SAMSUNG_SOURCE_IDS & scope == set()
 
 
-def test_production_build_excludes_soak_collector():
-    """Default build_collectors() must never register the soak collector —
-    this is the enforcement point keeping it out of production targets."""
+def test_canary_never_implies_notification_authority():
+    """The heart of the canary contract: production execution WITHOUT
+    notification authority. alerts/source_maturity.py still classifies the
+    source soak (fail-closed, absent from PRODUCTION_SOURCES) and the canary
+    allowlist must never overlap the production registry — full production
+    requires the separate, reviewed edit to that module (Fleet Law 8)."""
+    from alerts.source_maturity import (
+        MATURITY_SOAK,
+        PRODUCTION_SOURCES,
+        notifications_allowed,
+        source_maturity,
+    )
+
+    from collectors import CANARY_SAMSUNG_SOURCE_IDS
+
+    assert CANARY_SAMSUNG_SOURCE_IDS & PRODUCTION_SOURCES == set()
+    assert source_maturity("samsung_us_owners_product") == MATURITY_SOAK
+    assert notifications_allowed("samsung_us_owners_product") is False
+
+
+def test_production_build_registers_canary_collector():
+    """Default build_collectors() (production path) registers the canary
+    collector with maturity='canary'. The flag itself grants no delivery
+    authority — suppression lives in alerts/discord.py's maturity gate."""
 
     class _Settings:
         def get(self, key, *args, **kwargs):
@@ -195,10 +227,18 @@ def test_production_build_excludes_soak_collector():
             return default
 
     registry = build_collectors(_Settings(), project_root=ROOT)
-    assert all(c.name != "samsung_us_owners_product" for c in registry)
+    canary = [c for c in registry if c.name == "samsung_us_owners_product"]
+    assert len(canary) == 1
+    assert getattr(canary[0], "maturity") == "canary"
+    assert getattr(canary[0], "validation_status") == "LIVE_VALIDATED"
+    assert getattr(canary[0], "capability") == "discovery"
 
 
-def test_soak_build_registers_collector_with_maturity_flag():
+def test_soak_route_no_longer_registers_promoted_source_as_soak():
+    """include_soak=True no longer registers the promoted source as soak (its
+    soak stage concluded); the source appears — via the canary block — as
+    canary. The class-level default maturity stays the conservative 'soak'."""
+
     class _Settings:
         def get(self, key, *args, **kwargs):
             default = kwargs.get("default")
@@ -209,9 +249,10 @@ def test_soak_build_registers_collector_with_maturity_flag():
             return default
 
     registry = build_collectors(_Settings(), project_root=ROOT, include_soak=True)
-    soak = [c for c in registry if c.name == "samsung_us_owners_product"]
-    assert len(soak) == 1
-    assert getattr(soak[0], "maturity") == "soak"
+    owners = [c for c in registry if c.name == "samsung_us_owners_product"]
+    assert len(owners) == 1
+    assert getattr(owners[0], "maturity") == "canary"
+    assert SamsungOwnersCollector.maturity == "soak"
 
 
 def test_maturity_policy_keeps_soak_notifications_suppressed():

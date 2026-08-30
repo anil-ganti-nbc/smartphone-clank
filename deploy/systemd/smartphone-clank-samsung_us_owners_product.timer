@@ -1,0 +1,18 @@
+[Unit]
+Description=Schedule Smartphone Clank CANARY source samsung_us_owners_product
+
+[Timer]
+OnActiveSec=30s
+OnUnitActiveSec=3h
+AccuracySec=1s
+Unit=smartphone-clank-source@samsung_us_owners_product.service
+
+# CANARY (since 2026-08-30): production execution against the production DB
+# via smartphone-clank-source@.service (config/config.yaml). The source holds
+# NO notification authority — alerts/source_maturity.py suppresses every
+# newsroom send (fail-closed) until the reviewed full-promotion edit. See
+# docs/infra/SAMSUNG_US_OWNERS_PRODUCT_CANARY_REPORT.md. Cadence matches the
+# source's interval_minutes (180).
+
+[Install]
+WantedBy=timers.target

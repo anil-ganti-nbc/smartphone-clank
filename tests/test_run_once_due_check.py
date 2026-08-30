@@ -93,8 +93,13 @@ def test_production_targets_include_every_current_source_and_cadence():
 
     settings = load_settings("config/config.yaml")
     targets = build_targets(settings, object(), lambda: None)
+    # samsung_us_owners_product entered CANARY on 2026-08-30: production
+    # execution (3h cadence) with notifications still suppressed by
+    # alerts/source_maturity.py — see
+    # docs/infra/SAMSUNG_US_OWNERS_PRODUCT_CANARY_REPORT.md
     assert {target.source_id: target.interval_minutes for target in targets} == {
         "samsung_us_support_sitemap": 180,
+        "samsung_us_owners_product": 180,
         "google_store_category_phones": 45,
         "nothing_products_sitemap": 90,
         "oneplus_regional_sitemap": 90,

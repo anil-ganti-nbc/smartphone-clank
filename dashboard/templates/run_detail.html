@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.id }} · Clank{% endblock %}
+{% block content %}
+<h1>Run {{ run.id }} — <code>{{ run.collector_name }}</code>
+  {% if run.status == 'success' %}<span class="badge ok">{{ run.status }}</span>
+  {% elif run.status in ('failed', 'blocked', 'unexpected_zero') %}<span class="badge warn">{{ run.status }}</span>
+  {% else %}<span class="badge">{{ run.status }}</span>{% endif %}
+</h1>
+<p class="muted">
+  source {{ run.source_name or "—" }}
+  · run_reason {{ run.run_reason }}
+  · started {{ run.started_at }}
+  {% if run.finished_at %}· finished {{ run.finished_at }}{% endif %}
+  {% if run.duration_ms %}· {{ (run.duration_ms / 1000)|round(1) }}s{% endif %}
+  · <a href="/metrics">← All metrics</a>
+</p>
+
+<div class="card">
+  <h2>Phase counters</h2>
+  <table>
+    <tr><th>Pages requested</th><td>{{ run.pages_requested }}</td><th>Pages fetched</th><td>{{ run.pages_fetched }}</td></tr>
+    <tr><th>HTTP requests</th><td>{{ run.http_requests }}</td><th>HTTP failures</th><td>{{ run.http_failures }}</td></tr>
+    <tr><th>Parser failures</th><td>{{ run.parser_failures }}</td><th>Candidates</th><td>{{ run.candidates_found }}</td></tr>
+    <tr><th>Valid devices</th><td>{{ run.valid_devices }}</td><th>New devices</th><td>{{ run.new_devices }}</td></tr>
+    <tr><th>Updated devices</th><td>{{ run.updated_devices }}</td><th>Evidence added</th><td>{{ run.evidence_added }}</td></tr>
+    <tr><th>Meaningful changes</th><td>{{ run.meaningful_changes }}</td><th>Alerts sent</th><td>{{ run.alerts_sent }}</td></tr>
+    <tr><th>Resighted (no change)</th><td>{{ run.resighted }}</td><th>Cache hits/misses</th><td>{{ run.cache_hits }}/{{ run.cache_misses }}</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Regression notes</h2>
+  {% if run.notes %}
+  <p>{{ run.notes }}</p>
+  {% else %}
+  <p class="muted">No regression notes recorded for this run.</p>
+  {% endif %}
+  {% if run.meta %}
+  <p class="muted">meta: {{ run.meta }}</p>
+  {% endif %}
+</div>
+{% endblock %}

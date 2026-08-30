@@ -231,14 +231,36 @@ def metrics_page(request: Request):
             rec.collector_summary(n, in_scope=(scope is None or n in scope))
             for n in sorted(names)
         ]
+        recent_runs = (
+            session.query(CollectorRunRecord)
+            .order_by(CollectorRunRecord.started_at.desc())
+            .limit(20)
+            .all()
+        )
         db = rec.database_health()
         return TEMPLATES.TemplateResponse(
             request,
             "metrics.html",
-            {"rows": rows, "db": db},
+            {"rows": rows, "db": db, "recent_runs": recent_runs},
         )
     finally:
         session.close()
+
+@app.get("/metrics/runs/{run_id}", response_class=HTMLResponse)
+def run_detail(request: Request, run_id: str):
+    """STD-UI-COM-009 remediation (2026-08-31): the metrics page links each
+    recent run here, so the per-run state the backend already records —
+    status, phase-attributable counters, and the regression notes it
+    writes into run records — is directly reachable and discoverable."""
+    session = get_session()
+    try:
+        run = session.get(CollectorRunRecord, run_id)
+        if run is None:
+            return HTMLResponse(f"<h1>Not found: run {esc(run_id)}</h1>", status_code=404)
+        return TEMPLATES.TemplateResponse(request, "run_detail.html", {"run": run})
+    finally:
+        session.close()
+
 
 @app.get("/discord", response_class=HTMLResponse)
 def discord_status_page(request: Request):

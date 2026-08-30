@@ -70,6 +70,31 @@
   </table>
 </div>
 
+{% if recent_runs %}
+<div class="card">
+  <h2>Recent runs</h2>
+  <table>
+    <tr><th>Run</th><th>Collector</th><th>Status</th><th>Fetched</th><th>Parse fail</th><th>HTTP fail</th><th>Candidates</th><th>Started</th></tr>
+    {% for run in recent_runs %}
+    <tr>
+      <td><a href="/metrics/runs/{{ run.id }}">{{ run.id[:8] }}…</a></td>
+      <td><code>{{ run.collector_name }}</code></td>
+      <td>
+        {% if run.status == 'success' %}<span class="badge ok">{{ run.status }}</span>
+        {% elif run.status in ('failed', 'blocked', 'unexpected_zero') %}<span class="badge warn">{{ run.status }}</span>
+        {% else %}<span class="badge">{{ run.status }}</span>{% endif %}
+      </td>
+      <td>{{ run.pages_fetched }}</td>
+      <td>{{ run.parser_failures }}</td>
+      <td>{{ run.http_failures }}</td>
+      <td>{{ run.candidates_found }}</td>
+      <td class="muted">{{ run.started_at }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
 {% for r in rows %}
 {% if r.health.factors %}
 <div class="card">

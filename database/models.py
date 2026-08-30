@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Index,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
@@ -372,6 +373,43 @@ class WebhookDelivery(Base):
     __table_args__ = (
         Index("ix_webhook_deliveries_channel_created", "channel", "created_at"),
     )
+
+
+class AnalystAction(Base):
+    """Operator QC decision record (written by the qc-action CLI; ingested
+    read-only by Motherclank). One authoritative TERMINAL decision per
+    (target_type, target_id) — enforced here via the partial unique index
+    (fresh databases, via create_all) and by migration 0008 for
+    pre-existing databases. `note` is a non-terminal append-only
+    annotation channel, exempt via the index predicate; the
+    terminal/non-terminal split lives in database/analyst_actions.py.
+    created_at stores an ISO-8601 UTC string (that is what the writer has
+    always persisted). See database/analyst_actions.py for the write
+    contract (STD-UI-COM-002)."""
+
+    __tablename__ = "analyst_actions"
+
+    __table_args__ = (
+        Index(
+            "uq_analyst_action_terminal",
+            "target_type",
+            "target_id",
+            unique=True,
+            sqlite_where=text("action <> 'note'"),
+            postgresql_where=text("action <> 'note'"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_label: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    before_state: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    after_state: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    related_evidence: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class SitemapTraversalState(Base):

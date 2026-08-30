@@ -1226,10 +1226,10 @@ def demo(
 
 @app.command("qc-action")
 def qc_action(
-    action: str = typer.Option(..., help="Native action word: confirm | reject | "
-                                         "quarantine | promote | note"),
+    action: str = typer.Option(..., help="Terminal actions: confirm | reject | "
+                                         "quarantine | promote. Non-terminal: note"),
     target_type: str = typer.Option(..., help="Entity type: device | evidence"),
-    target_id: str = typer.Option(..., help="Target entity id"),
+    target_id: str = typer.Option(..., help="Target entity id or device model number"),
     reason: str = typer.Option("", help="Free-text operator rationale"),
     config: str = typer.Option("config/config.yaml", "--config"),
 ) -> None:
@@ -1237,28 +1237,42 @@ def qc_action(
 
     Deliberately minimal: the native action word is preserved verbatim; no
     fleet vocabulary imposed here. Motherclank ingests these rows read-only.
-    """
-    import uuid as _uuid
-    from datetime import datetime, timezone
 
+    Contract (STD-UI-COM-002): one authoritative TERMINAL decision per
+    target, enforced by a partial unique index — a duplicate or
+    conflicting terminal write is REJECTED with a distinct message and a
+    non-zero exit status (so automation can tell rejection from success).
+    `note` stays append-only. Every decision records a provenance snapshot
+    of the target it was made against, in the same transaction.
+    """
     from config.settings import load_settings
 
+    from database.analyst_actions import (
+        DuplicateTerminalDecision,
+        UnknownActionError,
+        UnknownTargetTypeError,
+        record_analyst_action,
+    )
+
     settings = load_settings(config)
-    from database.session import get_engine
-    engine = get_engine(settings.database_url)
-    with engine.connect() as conn:
-        conn.exec_driver_sql(
-            "INSERT INTO analyst_actions (id, action, target_type, target_id,"
-            " actor_label, reason, before_state, after_state, related_evidence,"
-            " created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                str(_uuid.uuid4()), action.strip(), target_type.strip(),
-                target_id.strip(), "operator-cli", reason or None,
-                None, None, None,
-                datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            ),
+    session_factory = get_session_factory(settings.database_url)
+    try:
+        record_analyst_action(
+            session_factory,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            reason=reason or None,
         )
-        conn.commit()
+    except DuplicateTerminalDecision as exc:
+        console.print(f"[red]rejected[/red] {action} {target_type}:{target_id} — {exc}")
+        raise typer.Exit(code=1)
+    except UnknownActionError as exc:
+        console.print(f"[red]unknown action[/red] — {exc}")
+        raise typer.Exit(code=1)
+    except UnknownTargetTypeError as exc:
+        console.print(f"[red]unknown target type[/red] — {exc}")
+        raise typer.Exit(code=1)
     console.print(f"[green]recorded[/green] {action} {target_type}:{target_id}")
 
 if __name__ == "__main__":

@@ -25,6 +25,18 @@ import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 
+# A frozen, console=False PyInstaller exe has no attached console, so
+# sys.stdout/stderr are None -- uvicorn's default logging setup (which
+# calls .isatty() on the configured stream via its ColourizedFormatter)
+# crashes with AttributeError/ValueError before the server ever starts.
+# Same failure mode found and fixed the same day in watch-clank's Windows
+# launcher -- give both streams a real, discarding fallback before
+# anything else (including uvicorn) can touch them.
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
 APP_NAME = "Smartphone Clank"
 
 

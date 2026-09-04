@@ -25,7 +25,7 @@
         <dt>Production OEMs</dt><dd>{{ about.oems|join(", ") }}</dd>
         <dt>Devices tracked</dt><dd>{{ about.device_count }}</dd>
         <dt>Recorded runs</dt><dd>{{ about.run_count }}</dd>
-        <dt>Collection</dt><dd>{{ about.collection_badge|safe }} <span class="dim">opening a page never collects</span></dd>
+        <dt>Collection</dt><dd>{{ about.collection_badge|safe }} <span class="dim">{{ about.collection_note }}</span></dd>
         <dt>Delivery</dt><dd>{{ about.delivery_badge|safe }} <span class="dim">no destination configured</span></dd>
         <dt>Times</dt><dd>All times UTC</dd>
       </dl>

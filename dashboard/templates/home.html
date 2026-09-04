@@ -5,14 +5,28 @@
 {% block page_sub %}<p class="page-sub">Smartphone discovery and evidence — local operator console</p>{% endblock %}
 {% block content %}
 
-{# STD-UI-COM-001: read-only state is a compact status strip, not a hero essay. #}
-{% if local_collection_sources %}
+{# STD-UI-COM-001: collection posture is a compact status strip, not a hero
+   essay. The invariant is "no collection on page load" — NOT "this console
+   cannot collect": Collect runs a source on an explicit operator action. #}
+{% if collection_available %}
 <div class="notice">
   <div class="notice-body">
-    <div class="notice-title">Collection is read-only in this console</div>
+    <div class="notice-title">Collection runs only when you ask for it</div>
     <div class="notice-text">
-      No authenticated mutation profile exists, so opening a page never starts a
-      collector. Use an approved CLI collection workflow to collect.
+      Opening or refreshing a page never starts a collector. To collect now, go to
+      <a href="/collect">Collect</a> and run a source explicitly.
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="notice">
+  <div class="notice-body">
+    <div class="notice-title">This console has no collection controls wired in</div>
+    <div class="notice-text">
+      Opening a page never starts a collector, and this process was started without
+      a collection controller, so no source can be run from here. Use the canonical
+      one-shot CLI (<span class="mono">python -m runtime.run_once --collector &lt;id&gt;</span>)
+      or start the dashboard through the Windows launcher.
     </div>
   </div>
 </div>

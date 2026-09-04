@@ -4,27 +4,64 @@
 {% block page_heading %}Devices{% endblock %}
 {% block page_sub %}<p class="page-sub">Every smartphone identity this Clank has evidence for</p>{% endblock %}
 {% block content %}
-<h1>Device queue</h1>
-<form method="get" style="margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap;">
-  <input name="q" value="{{ q }}" placeholder="Search model, name, family…"/>
-  <input name="manufacturer" value="{{ manufacturer }}" placeholder="manufacturer"/>
-  <button type="submit">Filter</button>
-</form>
-<div class="panel pad">
-  <table class="t">
-    <tr><th>Model</th><th>Marketing</th><th>Mfr</th><th>Family</th><th>Conf</th><th>Last seen</th></tr>
-    {% for d in devices %}
-    <tr>
-      <td><a href="/devices/{{ d.model_number }}"><code>{{ d.model_number }}</code></a></td>
-      <td>{{ d.marketing_name or "—" }}</td>
-      <td>{{ d.manufacturer }}</td>
-      <td>{{ d.family_name or "—" }}</td>
-      <td>{{ d.confidence }}</td>
-      <td class="dim">{{ d.last_seen }}</td>
-    </tr>
+<div class="panel">
+  <form class="filters" method="get">
+    <input class="f" name="q" value="{{ q }}" placeholder="Search model, name, family…" size="30"/>
+    <input class="f" name="manufacturer" value="{{ manufacturer }}" placeholder="manufacturer"/>
+    <button class="btn" type="submit">Filter</button>
+    {% if filtered %}<a class="btn tertiary" href="/devices">Clear</a>{% endif %}
+    <span class="right muted">
+      {% if devices %}showing {{ devices|length }}{% if devices|length == 100 %} (first 100){% endif %}
+      of {{ total_devices }} device{{ '' if total_devices == 1 else 's' }}
+      {% else %}{{ total_devices }} device{{ '' if total_devices == 1 else 's' }} in the database{% endif %}
+    </span>
+  </form>
+  <div class="panel-body flush">
+    {% if devices %}
+    <div class="tablewrap scroll">
+      <table class="t">
+        <thead>
+          <tr>
+            <th>Model</th><th>Marketing name</th><th>Manufacturer</th>
+            <th>Family</th><th class="num">Confidence</th><th>Last seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in devices %}
+          <tr>
+            <td class="mono"><a href="/devices/{{ d.model_number }}">{{ d.model_number }}</a></td>
+            <td>{{ d.marketing_name or "—" }}</td>
+            <td>{{ d.manufacturer }}</td>
+            <td class="dim">{{ d.family_name or "—" }}</td>
+            <td class="num">{{ d.confidence }}</td>
+            <td class="dim nowrap">{{ d.last_seen.strftime("%Y-%m-%d %H:%M") if d.last_seen else "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {# The two absences mean different things and must never share one message:
+       a filter that matched nothing is an operator action, an empty database is
+       a collection fact. #}
+    {% elif filtered %}
+    <div class="empty">
+      <div class="empty-title">No device matches this filter</div>
+      <div class="empty-hint">
+        {{ total_devices }} device{{ '' if total_devices == 1 else 's' }} are stored; none match the
+        search or manufacturer above. Clear the filter to see them all.
+      </div>
+    </div>
     {% else %}
-    <tr><td colspan="6" class="dim">No matches</td></tr>
-    {% endfor %}
-  </table>
+    <div class="empty">
+      <div class="empty-title">No devices observed yet</div>
+      <div class="empty-hint">
+        The database holds no device records. Devices appear here once a collector
+        run persists its first evidence — run a source from
+        <a href="/collect">Collect</a>, then check <a href="/metrics">Run History</a>
+        for what that run actually saw.
+      </div>
+    </div>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

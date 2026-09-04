@@ -13,6 +13,43 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from database.models import Base
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def resolve_database_url(database_url: str) -> str:
+    """Anchor a *relative* sqlite URL to the project root, once, at wiring time.
+
+    ``config/config.yaml`` ships ``sqlite:///./data/clank.db``, which SQLite
+    resolves against the process CWD **at connect time**, not at engine
+    construction. That is a real split-brain hazard for this app: importing
+    ``runtime.run_once`` performs ``os.chdir(ROOT)`` as an import side effect,
+    so a dashboard started from an unrelated directory could open
+    ``<launch dir>/data/clank.db`` while the collector it triggers writes to
+    ``<repo>/data/clank.db`` — the operator then sees a permanently empty UI
+    with no error anywhere.
+
+    Callers that wire a dashboard and a collection controller together resolve
+    the URL through here ONCE and hand the same absolute string to both, so
+    "the UI and the collector read the same database" is a property of the
+    wiring rather than of whatever directory the operator happened to launch
+    from. An absolute sqlite URL (what CLANK_DATA_DIR always produces) and any
+    non-sqlite URL are returned untouched.
+
+    Deliberately NOT applied inside ``Settings.database_url``: the configured
+    default is a documented, tested value and other deployments depend on it
+    verbatim.
+    """
+    prefix = "sqlite:///"
+    if not database_url.startswith(prefix):
+        return database_url
+    raw = database_url[len(prefix):]
+    if not raw or raw.startswith(":memory:"):
+        return database_url
+    path = Path(raw)
+    if path.is_absolute():
+        return database_url
+    return prefix + str((PROJECT_ROOT / path).resolve())
+
 
 def get_engine(database_url: str, echo: bool = False):
     # Ensure SQLite directory exists

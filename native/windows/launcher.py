@@ -49,6 +49,19 @@ def resource_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+# Put the project root on sys.path so `config`, `dashboard`, `database`,
+# `pipeline` and friends import when this file is run directly from a
+# source checkout. Python seeds sys.path[0] with the SCRIPT's directory --
+# native/windows -- not the repo, so without this the launcher dies on
+# "ModuleNotFoundError: No module named 'config'" and only works frozen,
+# where PyInstaller flattens every module into _MEIPASS. Idempotent, and
+# it adds exactly one entry: the same root resource_root() already
+# resolves for both execution modes.
+_ROOT = str(resource_root())
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+
 def default_data_dir() -> Path:
     """Windows per-user application data location; no username is embedded."""
     local_app_data = os.environ.get("LOCALAPPDATA")

@@ -307,6 +307,13 @@ input.f:focus, select.f:focus { outline: 2px solid var(--accent-soft); border-co
 .cols { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
 .cols.two { grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
 
+/* Secondary label under a primary one (source id under a source name, an
+   action description under an action). Several Clanks emit <small> for
+   this inline, which ran the two strings together. */
+small { display: block; color: var(--muted); font-size: var(--fs-label);
+        font-weight: 400; letter-spacing: 0; }
+.kpi p, .kpi .kpi-note { font-size: var(--fs-meta); margin: var(--s1) 0 0; }
+
 .stack { display: flex; flex-direction: column; gap: var(--s1); }
 .row   { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
 .muted { color: var(--muted); }

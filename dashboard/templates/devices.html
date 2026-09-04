@@ -1,5 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Device queue · Clank{% endblock %}
+{% set active = "devices" %}
+{% block title %}Devices{% endblock %}
+{% block page_heading %}Devices{% endblock %}
+{% block page_sub %}<p class="page-sub">Every smartphone identity this Clank has evidence for</p>{% endblock %}
 {% block content %}
 <h1>Device queue</h1>
 <form method="get" style="margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap;">
@@ -7,8 +10,8 @@
   <input name="manufacturer" value="{{ manufacturer }}" placeholder="manufacturer"/>
   <button type="submit">Filter</button>
 </form>
-<div class="card">
-  <table>
+<div class="panel pad">
+  <table class="t">
     <tr><th>Model</th><th>Marketing</th><th>Mfr</th><th>Family</th><th>Conf</th><th>Last seen</th></tr>
     {% for d in devices %}
     <tr>
@@ -17,10 +20,10 @@
       <td>{{ d.manufacturer }}</td>
       <td>{{ d.family_name or "—" }}</td>
       <td>{{ d.confidence }}</td>
-      <td class="muted">{{ d.last_seen }}</td>
+      <td class="dim">{{ d.last_seen }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">No matches</td></tr>
+    <tr><td colspan="6" class="dim">No matches</td></tr>
     {% endfor %}
   </table>
 </div>

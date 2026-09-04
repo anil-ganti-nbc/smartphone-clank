@@ -1,46 +1,146 @@
 {% extends "base.html" %}
-{% block title %}Newsroom Home · Clank{% endblock %}
+{% set active = "home" %}
+{% block title %}Overview{% endblock %}
+{% block page_heading %}Overview{% endblock %}
+{% block page_sub %}<p class="page-sub">Smartphone discovery and evidence — local operator console</p>{% endblock %}
 {% block content %}
-<h1>Newsroom overview</h1>
-<p class="muted">Local console · facts only · release-state defaults to unknown</p>
+
+{# STD-UI-COM-001: read-only state is a compact status strip, not a hero essay. #}
 {% if local_collection_sources %}
-<div class="card" id="local-collection">
-  <h2>Collection disabled</h2>
-  <p class="muted">This Phase 0 dashboard is read-only. No authenticated mutation profile exists; use an approved CLI collection workflow.</p>
+<div class="notice">
+  <div class="notice-body">
+    <div class="notice-title">Collection is read-only in this console</div>
+    <div class="notice-text">
+      No authenticated mutation profile exists, so opening a page never starts a
+      collector. Use an approved CLI collection workflow to collect.
+    </div>
+  </div>
 </div>
 {% endif %}
-<div class="grid">
-  <div class="card">
-    <h2>Recent activity</h2>
-    <table>
-      <tr><th>Model</th><th>Name</th><th>Conf</th><th>Family</th></tr>
-      {% for d in devices %}
-      <tr>
-        <td><a href="/devices/{{ d.model_number }}">{{ d.model_number }}</a></td>
-        <td>{{ d.marketing_name or "—" }}</td>
-        <td>{{ d.confidence }}</td>
-        <td>{{ d.family_name or "—" }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="4" class="muted">No local smartphone observations yet.</td></tr>
-      {% endfor %}
-    </table>
+
+<div class="kpis">
+  <div class="kpi {{ 'is-ok' if overview.health == 'HEALTHY' else ('is-warn' if overview.health == 'DEGRADED' else ('is-bad' if overview.health in ('FAILED','BLOCKED') else '')) }}">
+    <div class="kpi-label">Fleet health</div>
+    <div class="kpi-value sm">{{ overview.health_badge|safe }}</div>
+    <div class="kpi-note">{{ overview.health_note }}</div>
   </div>
-  <div class="card">
-    <h2>Highest confidence</h2>
-    <table>
-      <tr><th>Model</th><th>Conf</th><th>Tier</th></tr>
-      {% for d in rising %}
-      <tr>
-        <td><a href="/devices/{{ d.model_number }}">{{ d.model_number }}</a></td>
-        <td>{{ d.confidence }}</td>
-        <td>{{ d.product_tier or "—" }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="3" class="muted">Empty</td></tr>
-      {% endfor %}
-    </table>
+  <div class="kpi">
+    <div class="kpi-label">Devices tracked</div>
+    <div class="kpi-value">{{ overview.device_count }}</div>
+    <div class="kpi-note">across {{ overview.oem_count }} production OEM{{ '' if overview.oem_count == 1 else 's' }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Last run</div>
+    <div class="kpi-value sm">{{ overview.last_run_at or "None yet" }}</div>
+    <div class="kpi-note">{{ overview.last_run_note }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Last result</div>
+    <div class="kpi-value sm">{{ overview.last_run_badge|safe }}</div>
+    <div class="kpi-note">{{ overview.last_run_collector or "no collector run recorded" }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Runs (24h)</div>
+    <div class="kpi-value">{{ overview.runs_24h }}</div>
+    <div class="kpi-note">{{ overview.failed_24h }} failed</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Delivery</div>
+    <div class="kpi-value sm">{{ overview.delivery_badge|safe }}</div>
+    <div class="kpi-note">{{ overview.delivery_note }}</div>
   </div>
 </div>
-<p class="muted">Generated {{ now }} UTC</p>
+
+{# STD-UI-COM-008: health and coverage are separate ideas and stay separate. #}
+{% if overview.attention %}
+<div class="panel">
+  <div class="panel-head">
+    <h2 class="panel-title">Needs attention</h2>
+    <span class="panel-sub">{{ overview.attention|length }} item{{ '' if overview.attention|length == 1 else 's' }}</span>
+  </div>
+  <div class="panel-body flush">
+    <div class="tablewrap">
+      <table class="t">
+        <thead><tr><th>What</th><th>State</th><th>Detail</th></tr></thead>
+        <tbody>
+          {% for a in overview.attention %}
+          <tr>
+            <td>{{ a.what }}</td>
+            <td>{{ a.badge|safe }}</td>
+            <td class="dim wrap-any">{{ a.detail }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="cols two">
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2 class="panel-title">Recently seen devices</h2>
+      <a class="panel-sub" href="/devices">All devices →</a>
+    </div>
+    <div class="panel-body flush">
+      {% if devices %}
+      <div class="tablewrap">
+        <table class="t">
+          <thead>
+            <tr><th>Model</th><th>Marketing name</th><th class="num">Confidence</th><th>Family</th></tr>
+          </thead>
+          <tbody>
+            {% for d in devices %}
+            <tr>
+              <td class="mono"><a href="/devices/{{ d.model_number }}">{{ d.model_number }}</a></td>
+              <td>{{ d.marketing_name or "—" }}</td>
+              <td class="num">{{ d.confidence }}</td>
+              <td class="dim">{{ d.family_name or "—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">
+        <div class="empty-title">No devices observed yet</div>
+        <div class="empty-hint">Devices appear here once a collector run persists its first evidence.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2 class="panel-title">Highest confidence</h2>
+      <span class="panel-sub">Coverage, not health</span>
+    </div>
+    <div class="panel-body flush">
+      {% if rising %}
+      <div class="tablewrap">
+        <table class="t">
+          <thead><tr><th>Model</th><th class="num">Confidence</th><th>Tier</th></tr></thead>
+          <tbody>
+            {% for d in rising %}
+            <tr>
+              <td class="mono"><a href="/devices/{{ d.model_number }}">{{ d.model_number }}</a></td>
+              <td class="num">{{ d.confidence }}</td>
+              <td class="dim">{{ d.product_tier or "—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">
+        <div class="empty-title">No confidence ranking yet</div>
+        <div class="empty-hint">Ranking needs at least one device with scored evidence.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
 {% endblock %}

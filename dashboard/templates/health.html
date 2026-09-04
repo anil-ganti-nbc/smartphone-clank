@@ -1,10 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Source health · Clank{% endblock %}
+{% set active = "health" %}
+{% block title %}Sources{% endblock %}
+{% block page_heading %}Sources{% endblock %}
+{% block page_sub %}<p class="page-sub">Configured collection sources and their contact health</p>{% endblock %}
 {% block content %}
 <h1>Samsung source registry</h1>
-<p class="muted">Validation status from config — not invented at runtime</p>
-<div class="card">
-  <table>
+<p class="dim">Validation status from config — not invented at runtime</p>
+<div class="panel pad">
+  <table class="t">
     <tr><th>Source</th><th>Enabled</th><th>Status</th><th>Region</th><th>Notes</th></tr>
     {% for sid, src in sources.items() %}
     <tr>
@@ -20,7 +23,7 @@
         {% endif %}
       </td>
       <td>{{ src.region }}</td>
-      <td class="muted">{{ src.notes or "" }}</td>
+      <td class="dim">{{ src.notes or "" }}</td>
     </tr>
     {% endfor %}
   </table>

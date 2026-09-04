@@ -1,12 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Metrics · Clank{% endblock %}
+{% set active = "metrics" %}
+{% block title %}Run History{% endblock %}
+{% block page_heading %}Run History{% endblock %}
+{% block page_sub %}<p class="page-sub">Every recorded collector run, newest first</p>{% endblock %}
 {% block content %}
 <h1>Collector metrics</h1>
-<p class="muted">Immutable run history · health scores · regression notes in run records</p>
+<p class="dim">Immutable run history · health scores · regression notes in run records</p>
 
-<div class="card">
+<div class="panel pad">
   <h2>Database</h2>
-  <table>
+  <table class="t">
     <tr><th>Devices</th><th>Evidence</th><th>Snapshots</th><th>Run metrics rows</th><th>DB bytes</th></tr>
     <tr>
       <td>{{ db.devices }}</td>
@@ -18,9 +21,9 @@
   </table>
 </div>
 
-<div class="card">
+<div class="panel pad">
   <h2>Collectors</h2>
-  <table>
+  <table class="t">
     <tr>
       <th>Collector</th>
       <th>Health</th>
@@ -52,7 +55,7 @@
         {% endif %}
       </td>
       <td><strong>{{ r.health.score if r.health.score is not none else "—" }}</strong></td>
-      <td class="muted">{{ r.last_successful or "—" }}</td>
+      <td class="dim">{{ r.last_successful or "—" }}</td>
       <td>{{ "%.0f"|format(r.avg_runtime_ms) if r.avg_runtime_ms is not none else "—" }}</td>
       <td>{{ "%.0f"|format(r.median_runtime_ms) if r.median_runtime_ms is not none else "—" }}</td>
       <td>{{ r.runs_24h }}</td>
@@ -65,15 +68,15 @@
       <td>{{ "%.1f"|format(r.avg_candidates) if r.avg_candidates is not none else "—" }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="14" class="muted">No runs recorded yet. Run collectors or <code>python main.py demo long-run</code>.</td></tr>
+    <tr><td colspan="14" class="dim">No runs recorded yet. Run collectors or <code>python main.py demo long-run</code>.</td></tr>
     {% endfor %}
   </table>
 </div>
 
 {% if recent_runs %}
-<div class="card">
+<div class="panel pad">
   <h2>Recent runs</h2>
-  <table>
+  <table class="t">
     <tr><th>Run</th><th>Collector</th><th>Status</th><th>Fetched</th><th>Parse fail</th><th>HTTP fail</th><th>Candidates</th><th>Started</th></tr>
     {% for run in recent_runs %}
     <tr>
@@ -88,7 +91,7 @@
       <td>{{ run.parser_failures }}</td>
       <td>{{ run.http_failures }}</td>
       <td>{{ run.candidates_found }}</td>
-      <td class="muted">{{ run.started_at }}</td>
+      <td class="dim">{{ run.started_at }}</td>
     </tr>
     {% endfor %}
   </table>
@@ -97,15 +100,15 @@
 
 {% for r in rows %}
 {% if r.health.factors %}
-<div class="card">
+<div class="panel pad">
   <h2>{{ r.collector }} — score factors</h2>
-  <table>
+  <table class="t">
     <tr><th>Reason</th><th>Delta</th><th>Value</th></tr>
     {% for f in r.health.factors %}
     <tr>
       <td>{{ f.reason }}</td>
       <td>{{ f.delta }}</td>
-      <td class="muted">{{ f.value if f.value is defined else "—" }}</td>
+      <td class="dim">{{ f.value if f.value is defined else "—" }}</td>
     </tr>
     {% endfor %}
   </table>

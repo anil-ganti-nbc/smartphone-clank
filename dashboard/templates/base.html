@@ -1,47 +1,69 @@
-<!DOCTYPE html>
+{#
+  Smartphone Clank application shell — Collector UI design system v1.
+
+  The stylesheet and status vocabulary come from dashboard/collector_ui.py,
+  which is byte-identical across the six collector Clanks (pinned by
+  tests/test_collector_ui_design_system.py). Only the accent tokens below are
+  Smartphone's own, so the family reads as one product suite with six domain
+  personalities rather than six unrelated dashboards.
+#}<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>{% block title %}Clank Newsroom{% endblock %}</title>
-  <style>
-    :root { --bg:#0f1419; --card:#1a2332; --text:#e7ecf3; --muted:#8b9bb4; --accent:#3d8bfd; --ok:#3dd68c; --warn:#f5a524; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: ui-sans-serif, system-ui, sans-serif; background:var(--bg); color:var(--text); }
-    header { background:#111827; border-bottom:1px solid #243044; padding:12px 20px; display:flex; gap:20px; align-items:center; }
-    header a { color:var(--muted); text-decoration:none; font-size:14px; }
-    header a:hover { color:var(--text); }
-    header .brand { color:var(--accent); font-weight:700; margin-right:12px; }
-    main { max-width:1100px; margin:0 auto; padding:20px; }
-    .card { background:var(--card); border:1px solid #243044; border-radius:10px; padding:16px; margin-bottom:16px; }
-    h1,h2 { margin:0 0 12px; font-size:18px; }
-    table { width:100%; border-collapse:collapse; font-size:14px; }
-    th, td { text-align:left; padding:8px 6px; border-bottom:1px solid #243044; }
-    th { color:var(--muted); font-weight:600; }
-    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#243044; color:var(--muted); }
-    .badge.ok { background:#143528; color:var(--ok); }
-    .badge.warn { background:#3a2a12; color:var(--warn); }
-    input, select, button { background:#0f1419; color:var(--text); border:1px solid #243044; border-radius:6px; padding:8px 10px; }
-    button { background:var(--accent); border:none; cursor:pointer; }
-    .muted { color:var(--muted); }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-    @media (max-width:800px) { .grid { grid-template-columns:1fr; } }
-    code { background:#0f1419; padding:1px 5px; border-radius:4px; }
-  </style>
+  <title>{% block title %}{{ page_title|default("Overview") }}{% endblock %} · Smartphone Clank</title>
+  <style>{{ ui_css }}
+:root { --accent: {{ ui_accent }}; --accent-soft: {{ ui_accent_soft }}; }</style>
 </head>
 <body>
-  <header>
-    <a class="brand" href="/">Clank</a>
-    <a href="/">Home</a>
-    <a href="/devices">Devices</a>
-    <a href="/health">Sources</a>
-    <a href="/metrics">Metrics</a>
-    <a href="/discord">Discord</a>
-    <span class="muted" style="margin-left:auto; font-size:12px">build {{ runtime_identity.build_revision }} · DB {{ runtime_identity.database_revision }}</span>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">SP</span>
+      <span class="brand-name">Smartphone Clank</span>
+      <span class="brand-suite">Clank Fleet</span>
+    </div>
+    <div class="topbar-meta">
+      {% if runtime_identity %}
+      <span class="mono">build {{ runtime_identity.build_revision }}</span>
+      <span class="mono">db {{ runtime_identity.database_revision }}</span>
+      {% endif %}
+      <span class="badge plain sq">READ-ONLY</span>
+    </div>
   </header>
-  <main>
-    {% block content %}{% endblock %}
-  </main>
-  <footer class="muted" style="text-align:center; padding:8px 0 16px; font-size:12px">All times UTC</footer>
+
+  <div class="body">
+    <nav class="rail">
+      <div class="rail-group first">Monitor</div>
+      <a class="nav {{ 'active' if active == 'home' }}" href="/">Overview</a>
+      <a class="nav {{ 'active' if active == 'devices' }}" href="/devices">Devices</a>
+      <div class="rail-group">Operations</div>
+      <a class="nav {{ 'active' if active == 'metrics' }}" href="/metrics">Run History</a>
+      <a class="nav {{ 'active' if active == 'health' }}" href="/health">Sources</a>
+      <a class="nav {{ 'active' if active == 'discord' }}" href="/discord">Delivery</a>
+      <div class="rail-group">System</div>
+      <a class="nav {{ 'active' if active == 'about' }}" href="/about">About</a>
+    </nav>
+
+    <main class="main">
+      <div class="wrap">
+        <div class="page-head">
+          <h1 class="page-title">{% block page_heading %}{{ page_title|default("Overview") }}{% endblock %}</h1>
+          {% block page_sub %}{% if page_subtitle %}<p class="page-sub">{{ page_subtitle }}</p>{% endif %}{% endblock %}
+        </div>
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  {# STD-UI-COM-010: one explicit convention, stated once, for every surface. #}
+  <footer class="foot">
+    <span>All times UTC</span>
+    <span>Smartphone Clank · Clank Fleet</span>
+    <span class="right">Local operator console — opening a page never collects</span>
+  </footer>
+
+</div>
 </body>
 </html>

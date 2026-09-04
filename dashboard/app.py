@@ -63,7 +63,74 @@ def create_app(database_url: str | None = None, collection_controller=None) -> F
         "build_revision": os.getenv("CLANK_BUILD_REVISION", "local-source"),
         "database_revision": current_revision(database_url) or "unstamped",
     }
+    # Collector UI design system v1: the stylesheet is shared byte-for-byte
+    # across the six collector Clanks; only the accent is Smartphone's own.
+    from dashboard.collector_ui import CSS as _UI_CSS
+    TEMPLATES.env.globals["ui_css"] = _UI_CSS
+    TEMPLATES.env.globals["ui_accent"] = SMARTPHONE_ACCENT
+    TEMPLATES.env.globals["ui_accent_soft"] = SMARTPHONE_ACCENT_SOFT
     return app
+
+
+# Smartphone Clank domain accent (the only visual token this Clank overrides).
+SMARTPHONE_ACCENT = "#4c8dff"
+SMARTPHONE_ACCENT_SOFT = "#16283f"
+
+
+def _overview(session):
+    """Operator overview facts: is it healthy, when did it last run, what came
+    of it. STD-UI-COM-008 keeps health (did contact succeed) separate from
+    coverage (how much was seen)."""
+    from datetime import timedelta
+
+    from dashboard.collector_ui import badge
+    from observability.metrics import CollectorRunRecord
+
+    now = datetime.utcnow()
+    recent = (
+        session.query(CollectorRunRecord)
+        .order_by(CollectorRunRecord.started_at.desc())
+        .limit(50)
+        .all()
+    )
+    last = recent[0] if recent else None
+    day = [r for r in recent if r.started_at and r.started_at >= now - timedelta(hours=24)]
+    failed = [r for r in day if (r.status or "") not in ("success", "ok")]
+
+    if last is None:
+        health, note = "UNKNOWN", "no collector run recorded yet"
+    elif failed:
+        health, note = "DEGRADED", f"{len(failed)} of {len(day)} runs failed in 24h"
+    else:
+        health, note = "HEALTHY", f"{len(day)} run(s) in the last 24h, none failed"
+
+    attention = []
+    for r in failed[:8]:
+        attention.append({
+            "what": r.collector_name or "unknown collector",
+            "badge": badge(r.status or "FAILED"),
+            "detail": (r.notes or r.meta or "no cause recorded on this run"),
+        })
+
+    from collectors.wave1 import PRODUCTION_OEM_SCOPE
+
+    return {
+        "health": health,
+        "health_badge": badge(health),
+        "health_note": note,
+        "device_count": session.query(Device).count(),
+        "oem_count": len(PRODUCTION_OEM_SCOPE),
+        "last_run_at": last.started_at.strftime("%Y-%m-%d %H:%M") if last and last.started_at else None,
+        "last_run_note": ("trigger " + (last.run_reason or "unknown")) if last else "runs appear here after the first cycle",
+        "last_run_badge": badge(last.status if last else "UNKNOWN"),
+        "last_run_collector": last.collector_name if last else None,
+        "runs_24h": len(day),
+        "failed_24h": len(failed),
+        # STD-UI-COM-011: delivery state is its own axis, never a boolean.
+        "delivery_badge": badge("DISABLED"),
+        "delivery_note": "no destination configured in this console",
+        "attention": attention,
+    }
 
 
 def get_session():
@@ -106,7 +173,8 @@ def home(request: Request):
         return TEMPLATES.TemplateResponse(request, "home.html", {
                 "devices": devices,
                 "rising": rising,
-                "now": datetime.utcnow().isoformat(),
+                "active": "home",
+                "overview": _overview(session),
                 "local_collection_sources": (
                     __import__("dashboard.local_collection", fromlist=["SMARTPHONE_FIELD_TEST_SOURCES"])
                     .SMARTPHONE_FIELD_TEST_SOURCES if _collection_controller else ()
@@ -130,6 +198,35 @@ def local_collection_run(payload: dict = Body(...)):
         {"error": "authenticated_profile_required", "detail": "Phase 0 dashboard is read-only."},
         status_code=403,
     )
+
+
+@app.get("/about", response_class=HTMLResponse)
+def about_page(request: Request):
+    """Common About/identity surface for the collector family. Deliberately
+    exposes only non-secret provenance: no credential, webhook or token."""
+    from collectors.wave1 import PRODUCTION_OEM_SCOPE
+    from dashboard.collector_ui import DESIGN_SYSTEM_VERSION, badge
+    from observability.metrics import CollectorRunRecord
+
+    session = get_session()
+    try:
+        identity = TEMPLATES.env.globals.get("runtime_identity", {})
+        return TEMPLATES.TemplateResponse(request, "about.html", {
+            "active": "about",
+            "about": {
+                "build_revision": identity.get("build_revision", "unknown"),
+                "database_revision": identity.get("database_revision", "unstamped"),
+                "schema_badge": badge("HEALTHY" if identity.get("database_revision") not in (None, "unstamped") else "UNKNOWN"),
+                "design_system": DESIGN_SYSTEM_VERSION,
+                "oems": sorted(PRODUCTION_OEM_SCOPE),
+                "device_count": session.query(Device).count(),
+                "run_count": session.query(CollectorRunRecord).count(),
+                "collection_badge": badge("DISABLED"),
+                "delivery_badge": badge("DISABLED"),
+            },
+        })
+    finally:
+        session.close()
 
 
 @app.get("/devices", response_class=HTMLResponse)

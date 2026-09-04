@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% set active = "about" %}
+{% block title %}About{% endblock %}
+{% block page_heading %}About this Clank{% endblock %}
+{% block page_sub %}<p class="page-sub">Runtime identity and safe diagnostic provenance</p>{% endblock %}
+{% block content %}
+<div class="cols two">
+  <div class="panel">
+    <div class="panel-head"><h2 class="panel-title">Identity</h2></div>
+    <div class="panel-body">
+      <dl class="dl">
+        <dt>Clank</dt><dd>Smartphone Clank</dd>
+        <dt>Fleet</dt><dd>Clank Fleet — collector family</dd>
+        <dt>Build revision</dt><dd class="mono">{{ about.build_revision }}</dd>
+        <dt>Database revision</dt><dd class="mono">{{ about.database_revision }}</dd>
+        <dt>Schema state</dt><dd>{{ about.schema_badge|safe }}</dd>
+        <dt>Design system</dt><dd class="mono">{{ about.design_system }}</dd>
+      </dl>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><h2 class="panel-title">Scope and safety</h2></div>
+    <div class="panel-body">
+      <dl class="dl">
+        <dt>Production OEMs</dt><dd>{{ about.oems|join(", ") }}</dd>
+        <dt>Devices tracked</dt><dd>{{ about.device_count }}</dd>
+        <dt>Recorded runs</dt><dd>{{ about.run_count }}</dd>
+        <dt>Collection</dt><dd>{{ about.collection_badge|safe }} <span class="dim">opening a page never collects</span></dd>
+        <dt>Delivery</dt><dd>{{ about.delivery_badge|safe }} <span class="dim">no destination configured</span></dd>
+        <dt>Times</dt><dd>All times UTC</dd>
+      </dl>
+      <p class="dim" style="margin:16px 0 0;font-size:12px">
+        No credential, webhook URL or token is read or shown by this page.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

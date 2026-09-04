@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% set active = "collect" %}
+{% block title %}Collect{% endblock %}
+{% block page_heading %}Collect{% endblock %}
+{% block page_sub %}<p class="page-sub">Run a production source now — explicit operator action, one run at a time</p>{% endblock %}
+{% block content %}
+
+{% if not available %}
+<div class="notice bad">
+  <div class="notice-body">
+    <div class="notice-title">Collection controls are not wired into this process</div>
+    <div class="notice-text">
+      {{ unavailable_reason or "This dashboard was started without a collection controller, so no source can be run from here." }}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="notice info">
+  <div class="notice-body">
+    <div class="notice-title">Opening this page does not collect</div>
+    <div class="notice-text">
+      Collection starts only when you press Run. Each Run performs exactly one
+      cycle of one named source through the same registry, locking and
+      persistence path the scheduled production runs use — it does not change
+      any schedule, and it never enables a source that is not already in
+      production scope.
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="kpis">
+  <div class="kpi">
+    <div class="kpi-label">Collection state</div>
+    <div class="kpi-value sm" id="kpi-state">—</div>
+    <div class="kpi-note" id="kpi-state-note">reading current state…</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Runnable sources</div>
+    <div class="kpi-value">{{ sources|selectattr("enabled")|list|length }}</div>
+    <div class="kpi-note">of {{ source_count }} in local operator scope</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Default run scope</div>
+    <div class="kpi-value sm">One named source</div>
+    <div class="kpi-note">production maturity only — soak/canary sources are not offered here</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Writes to</div>
+    <div class="kpi-value sm mono">{{ database_url }}</div>
+    <div class="kpi-note">the same database every page on this console reads</div>
+  </div>
+</div>
+
+{# Live run feedback. Populated only by the read-only status poll; this block
+   never initiates a run. #}
+<div class="panel" id="run-feedback" hidden>
+  <div class="panel-head">
+    <h2 class="panel-title">Current run</h2>
+    <span class="panel-sub" id="run-source">—</span>
+  </div>
+  <div class="panel-body">
+    <div class="row" style="margin-bottom:12px">
+      <span id="run-badge"></span>
+      <span class="dim" id="run-message"></span>
+      <span class="right mono" id="run-duration"></span>
+    </div>
+    <dl class="dl" id="run-metrics"></dl>
+    <div id="run-errors"></div>
+    <div id="run-link" class="row" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <h2 class="panel-title">Sources</h2>
+    <span class="panel-sub">Maturity and scope come from the canonical registry, not from this page</span>
+  </div>
+  <div class="panel-body flush">
+    {% if sources %}
+    <div class="tablewrap">
+      <table class="t">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Maturity</th>
+            <th>State</th>
+            <th>Last result</th>
+            <th class="num">Discovered</th>
+            <th class="num">New</th>
+            <th>Last run</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sources %}
+          <tr>
+            <td>
+              {{ s.label }}
+              <small class="mono">{{ s.source_id }}</small>
+            </td>
+            <td>{{ s.maturity_badge|safe }}</td>
+            <td>
+              {{ s.enabled_badge|safe }}
+              {% if s.interval_minutes %}<small>scheduled every {{ s.interval_minutes }} min</small>{% endif %}
+            </td>
+            <td>{{ s.last_badge|safe }}</td>
+            <td class="num">{{ s.last_candidates if s.last_candidates is not none else "—" }}</td>
+            <td class="num">{{ s.last_new_devices if s.last_new_devices is not none else "—" }}</td>
+            <td class="dim nowrap">
+              {% if s.last_started_at %}
+                {% if s.last_run_id %}<a href="/metrics/runs/{{ s.last_run_id }}">{{ s.last_started_at.strftime("%Y-%m-%d %H:%M") }}</a>
+                {% else %}{{ s.last_started_at.strftime("%Y-%m-%d %H:%M") }}{% endif %}
+              {% else %}never{% endif %}
+            </td>
+            <td>
+              <button class="btn primary sm run-btn"
+                      type="button"
+                      data-source-id="{{ s.source_id }}"
+                      data-source-label="{{ s.label }}"
+                      {% if not s.enabled or not available %}disabled{% endif %}>Run now</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      <div class="empty-title">No source is runnable from this console</div>
+      <div class="empty-hint">
+        {{ unavailable_reason or "The collection controller reported no sources in local operator scope." }}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // IMPORTANT: this script polls a READ-ONLY status endpoint. It never posts
+  // on page load, on any document-ready hook, or on any timer. A run is issued
+  // from the click handler below and nowhere else.
+  var feedback = document.getElementById("run-feedback");
+  var poll = null;
+
+  var TONE = {
+    running: "info", queued: "info", success: "ok", partial: "warn",
+    degraded: "warn", unexpected_zero: "warn", failed: "bad", blocked: "bad",
+    already_running: "warn", idle: ""
+  };
+  var LABEL = {
+    idle: "IDLE", queued: "QUEUED", running: "RUNNING", success: "SUCCESS",
+    partial: "PARTIAL", degraded: "DEGRADED", unexpected_zero: "PARTIAL",
+    failed: "FAILED", blocked: "BLOCKED", already_running: "ALREADY RUNNING"
+  };
+
+  function badge(state) {
+    var tone = TONE[state] || "";
+    var span = document.createElement("span");
+    span.className = "badge" + (tone ? " " + tone : "");
+    span.textContent = LABEL[state] || String(state || "UNKNOWN").toUpperCase();
+    return span;
+  }
+
+  function text(el, value) { el.textContent = value == null ? "" : String(value); }
+
+  function setButtonsDisabled(busy) {
+    var buttons = document.querySelectorAll(".run-btn");
+    for (var i = 0; i < buttons.length; i++) {
+      if (buttons[i].dataset.permanentlyDisabled === "1") { continue; }
+      buttons[i].disabled = busy;
+    }
+  }
+
+  function render(state) {
+    if (!state || state.error === "local_collection_unavailable") { return; }
+    // Nothing has run in this process yet: keep the panel out of the way
+    // rather than showing an empty "current run".
+    feedback.hidden = (state.state === "idle" && !state.run_id);
+
+    var badgeHost = document.getElementById("run-badge");
+    badgeHost.innerHTML = "";
+    badgeHost.appendChild(badge(state.state));
+
+    text(document.getElementById("run-source"),
+         state.source_label ? state.source_label + " · " + state.source_id : "no source selected");
+    text(document.getElementById("run-message"), state.message);
+    text(document.getElementById("run-duration"),
+         state.duration_seconds == null ? "" : state.duration_seconds + "s");
+
+    text(document.getElementById("kpi-state"), LABEL[state.state] || state.state);
+    text(document.getElementById("kpi-state-note"),
+         state.busy ? "a run is in progress" : "no run in progress");
+
+    var dl = document.getElementById("run-metrics");
+    dl.innerHTML = "";
+    var m = state.metrics;
+    if (m) {
+      var pairs = [
+        ["Discovered", m.candidates_found], ["Accepted", m.valid_devices],
+        ["New", m.new_devices], ["Updated", m.updated_devices],
+        ["Re-sighted", m.resighted], ["Evidence added", m.evidence_added],
+        ["Pages fetched", m.pages_fetched + " / " + m.pages_requested],
+        ["HTTP requests", m.http_requests], ["HTTP failures", m.http_failures],
+        ["Parser failures", m.parser_failures]
+      ];
+      for (var i = 0; i < pairs.length; i++) {
+        if (pairs[i][1] == null) { continue; }
+        var dt = document.createElement("dt"); dt.textContent = pairs[i][0];
+        var dd = document.createElement("dd"); dd.textContent = String(pairs[i][1]);
+        dl.appendChild(dt); dl.appendChild(dd);
+      }
+    }
+
+    var errors = document.getElementById("run-errors");
+    errors.innerHTML = "";
+    if (state.errors && state.errors.length) {
+      var box = document.createElement("div");
+      box.className = "notice bad";
+      var body = document.createElement("div");
+      body.className = "notice-body";
+      var title = document.createElement("div");
+      title.className = "notice-title";
+      title.textContent = "Errors reported by this run";
+      body.appendChild(title);
+      for (var e = 0; e < state.errors.length; e++) {
+        var line = document.createElement("div");
+        line.className = "notice-text";
+        line.textContent = state.errors[e];
+        body.appendChild(line);
+      }
+      box.appendChild(body);
+      errors.appendChild(box);
+    }
+
+    var link = document.getElementById("run-link");
+    link.innerHTML = "";
+    if (state.run_id) {
+      var a = document.createElement("a");
+      a.className = "btn sm";
+      a.href = "/metrics/runs/" + encodeURIComponent(state.run_id);
+      a.textContent = "Open run detail";
+      link.appendChild(a);
+      var all = document.createElement("a");
+      all.className = "btn tertiary sm";
+      all.href = "/metrics";
+      all.textContent = "Run History";
+      link.appendChild(all);
+    }
+
+    setButtonsDisabled(!!state.busy);
+    if (!state.busy && poll) { window.clearInterval(poll); poll = null; }
+  }
+
+  function refresh() {
+    fetch("/api/local-collection/status", { headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(render)
+      .catch(function () { /* transient; the next tick retries */ });
+  }
+
+  function startPolling() {
+    if (poll) { return; }
+    poll = window.setInterval(refresh, 1500);
+  }
+
+  var buttons = document.querySelectorAll(".run-btn");
+  for (var i = 0; i < buttons.length; i++) {
+    if (buttons[i].disabled) { buttons[i].dataset.permanentlyDisabled = "1"; }
+    buttons[i].addEventListener("click", function (event) {
+      var button = event.currentTarget;
+      var sourceId = button.dataset.sourceId;
+      setButtonsDisabled(true);
+      feedback.hidden = false;
+      text(document.getElementById("run-message"), "Requesting a run of " + button.dataset.sourceLabel + "…");
+      fetch("/api/local-collection/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_id: sourceId })
+      }).then(function (r) {
+        return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+      }).then(function (result) {
+        render(result.body);
+        if (result.ok) {
+          startPolling();
+        } else {
+          // A refused request is a finished interaction, not a running one.
+          setButtonsDisabled(false);
+          var errors = document.getElementById("run-errors");
+          errors.innerHTML = "";
+          var box = document.createElement("div");
+          box.className = "notice bad";
+          var body = document.createElement("div");
+          body.className = "notice-body";
+          var title = document.createElement("div");
+          title.className = "notice-title";
+          title.textContent = "Run refused: " + (result.body.error || "unknown reason");
+          var detail = document.createElement("div");
+          detail.className = "notice-text";
+          detail.textContent = result.body.detail || result.body.message || "";
+          body.appendChild(title); body.appendChild(detail);
+          box.appendChild(body); errors.appendChild(box);
+          feedback.hidden = false;
+        }
+      }).catch(function (err) {
+        setButtonsDisabled(false);
+        text(document.getElementById("run-message"), "Could not reach the console: " + err);
+      });
+    });
+  }
+
+  // One read-only status read so a page opened while another tab's run is in
+  // flight shows that run. Reading status starts nothing.
+  refresh();
+})();
+</script>
+{% endblock %}

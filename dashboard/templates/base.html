@@ -29,7 +29,10 @@
       <span class="mono">build {{ runtime_identity.build_revision }}</span>
       <span class="mono">db {{ runtime_identity.database_revision }}</span>
       {% endif %}
-      <span class="badge plain sq">READ-ONLY</span>
+      {# Collection is operator-triggered, never automatic. The chip states
+         which of those two it is; it must not claim the console is read-only,
+         because an explicit Run on /collect really does collect. #}
+      <span class="badge plain sq">MANUAL COLLECTION</span>
     </div>
   </header>
 
@@ -39,6 +42,7 @@
       <a class="nav {{ 'active' if active == 'home' }}" href="/">Overview</a>
       <a class="nav {{ 'active' if active == 'devices' }}" href="/devices">Devices</a>
       <div class="rail-group">Operations</div>
+      <a class="nav {{ 'active' if active == 'collect' }}" href="/collect">Collect</a>
       <a class="nav {{ 'active' if active == 'metrics' }}" href="/metrics">Run History</a>
       <a class="nav {{ 'active' if active == 'health' }}" href="/health">Sources</a>
       <a class="nav {{ 'active' if active == 'discord' }}" href="/discord">Delivery</a>

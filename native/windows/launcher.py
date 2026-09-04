@@ -7,10 +7,15 @@ inherited Discord/webhook delivery credentials as belt-and-suspenders (this
 repo's config/settings.py reads DISCORD_WEBHOOK_URL and
 MAINTENANCE_DISCORD_WEBHOOK_URL from the environment, so an ambient value
 must never silently activate delivery in this read-mostly field-test
-build); and opens the loopback dashboard. The dashboard itself is unchanged
-from the checkout: bulk/GLOBAL collection stays hard-blocked (403) and only
-the eight named SMARTPHONE_FIELD_TEST_SOURCES remain individually
-triggerable via LocalCollectionController.start(source_id).
+build); and opens the loopback dashboard.
+
+Collection posture: opening the dashboard never collects. An operator may
+start collection explicitly from the Collect page, which runs exactly one of
+the eight named SMARTPHONE_FIELD_TEST_SOURCES through
+LocalCollectionController.start(source_id) and therefore through the canonical
+runtime.run_once registry/lock path. Bulk/GLOBAL collection remains
+unreachable from the UI, and the server is bound to loopback on an ephemeral
+port with the mutation endpoint additionally restricted to a loopback peer.
 """
 
 from __future__ import annotations
@@ -135,21 +140,38 @@ def main() -> None:
     # then restore the original CWD immediately.
     with working_directory(root):
         initialise_local_database(settings.database_url)
-    from database.session import get_session_factory
+
+    from database.session import get_session_factory, resolve_database_url
     from pipeline import IntelligencePipeline
     from dashboard.local_collection import LocalCollectionController
-    session_factory = get_session_factory(settings.database_url)
+    # Resolve ONCE and reuse for every consumer below. Under this launcher
+    # CLANK_DATA_DIR is always set, so the URL is already absolute and this is
+    # a no-op — but it keeps the frozen path and the source path wired to the
+    # database the same way, which is what makes source/frozen parity checkable.
+    database_url = resolve_database_url(settings.database_url)
+    session_factory = get_session_factory(database_url)
     pipeline = IntelligencePipeline(settings, session_factory)
-    controller = LocalCollectionController(
-        settings, session_factory, pipeline, project_root=root,
-    )
+    controller_error = None
+    try:
+        controller = LocalCollectionController(
+            settings, session_factory, pipeline, project_root=root,
+            database_url=database_url,
+        )
+    except Exception as exc:
+        # A registry/scope failure must reach the operator as a stated reason on
+        # the Collect page, not as a dashboard that refuses to start at all.
+        controller, controller_error = None, f"{type(exc).__name__}: {exc}"
     from runtime.daemon import setup_runtime_logging
     setup_runtime_logging(data_dir / "logs", os.environ.get("CLANK_LOG_LEVEL", "INFO"))
     from dashboard.app import create_app
     import uvicorn
     port = available_loopback_port()
     url = f"http://127.0.0.1:{port}/"
-    dashboard = create_app(settings.database_url, collection_controller=controller)
+    dashboard = create_app(
+        database_url,
+        collection_controller=controller,
+        collection_unavailable_reason=controller_error,
+    )
 
     def open_when_ready() -> None:
         deadline = time.monotonic() + 30

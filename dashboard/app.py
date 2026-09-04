@@ -32,14 +32,18 @@ app = FastAPI(title="Clank Newsroom", docs_url=None, redoc_url=None)
 _Session = None
 _engine = None
 _collection_controller = None
+# Why no controller is wired, when there is none. Shown on /collect instead of
+# a blank page, so "I can't run anything" always has a stated reason.
+_collection_unavailable_reason = None
 
 
-def create_app(database_url: str | None = None, collection_controller=None) -> FastAPI:
+def create_app(database_url: str | None = None, collection_controller=None,
+               collection_unavailable_reason: str | None = None) -> FastAPI:
     """The dashboard is a real production runtime path (launched by
     scripts/windows/start-dashboard.ps1, supervised by health-check.ps1) —
     it must never create or alter schema. Refuses via SchemaError if the
     tables it reads are missing, same as the daemon and `report`."""
-    global _Session, _engine, _collection_controller
+    global _Session, _engine, _collection_controller, _collection_unavailable_reason
     if database_url is None:
         from config.settings import load_settings
         database_url = load_settings().database_url
@@ -54,6 +58,8 @@ def create_app(database_url: str | None = None, collection_controller=None) -> F
     )
     _Session = sessionmaker(bind=_engine, autoflush=False, autocommit=False)
     _collection_controller = collection_controller
+    _collection_unavailable_reason = collection_unavailable_reason
+    TEMPLATES.env.globals["collection_available"] = collection_controller is not None
     # Deliberately expose only non-secret runtime provenance in the local UI.
     # The database revision is evidence that the dashboard and collector are
     # pointed at the same state, while the build revision identifies a frozen
@@ -175,10 +181,6 @@ def home(request: Request):
                 "rising": rising,
                 "active": "home",
                 "overview": _overview(session),
-                "local_collection_sources": (
-                    __import__("dashboard.local_collection", fromlist=["SMARTPHONE_FIELD_TEST_SOURCES"])
-                    .SMARTPHONE_FIELD_TEST_SOURCES if _collection_controller else ()
-                ),
             },
         )
     finally:
@@ -187,17 +189,119 @@ def home(request: Request):
 
 @app.get("/api/local-collection/status")
 def local_collection_status():
+    """Read-only poll for the Collect page. Reports state; never starts one."""
     if _collection_controller is None:
         return JSONResponse({"error": "local_collection_unavailable"}, status_code=404)
     return _collection_controller.snapshot()
 
 
+def _require_local_operator(request: Request) -> None:
+    """Local-operator authority for mutating endpoints.
+
+    This console has no authenticated remote profile, so the authority model is
+    the one the rest of the app already uses: the server binds loopback only
+    (native/windows/launcher.py binds 127.0.0.1 on an ephemeral port; `main.py
+    dashboard` refuses a non-loopback --host via require_loopback_host), and a
+    mutation is additionally accepted only from a loopback peer. Reusing
+    main.require_loopback_host keeps ONE definition of "loopback" rather than a
+    second, drifting copy here.
+
+    Raises ValueError when the caller is not a local operator.
+    """
+    from main import require_loopback_host
+
+    client = request.client
+    host = client.host if client else ""
+    # A TestClient request has a synthetic client host; an absent peer is
+    # treated as untrusted rather than assumed local.
+    require_loopback_host(host)
+
+
 @app.post("/api/local-collection/run")
-def local_collection_run(payload: dict = Body(...)):
-    return JSONResponse(
-        {"error": "authenticated_profile_required", "detail": "Phase 0 dashboard is read-only."},
-        status_code=403,
-    )
+def local_collection_run(request: Request, payload: dict = Body(...)):
+    """Start exactly one collection run. EXPLICIT OPERATOR ACTION ONLY.
+
+    This used to hard-return 403 "Phase 0 dashboard is read-only", which left
+    the console with no way to collect at all. The invariant it was protecting
+    is narrower than that and is still fully enforced: opening or refreshing a
+    page never collects. Collection begins only on this POST, only for a named
+    source in SMARTPHONE_FIELD_TEST_SOURCES, only from a loopback operator, and
+    only one run at a time.
+    """
+    if _collection_controller is None:
+        return JSONResponse(
+            {
+                "error": "local_collection_unavailable",
+                "detail": _collection_unavailable_reason
+                or "No collection controller is wired into this dashboard process.",
+            },
+            status_code=404,
+        )
+    try:
+        _require_local_operator(request)
+    except ValueError as exc:
+        return JSONResponse(
+            {"error": "local_operator_required", "detail": str(exc)}, status_code=403
+        )
+
+    source_id = (payload or {}).get("source_id")
+    if not isinstance(source_id, str) or not source_id:
+        return JSONResponse(
+            {"error": "source_id_required",
+             "detail": "Name exactly one source to run."},
+            status_code=400,
+        )
+
+    started, state = _collection_controller.start(source_id)
+    if not started:
+        # 409 for "already running" (a real, retryable operator condition);
+        # 400 for a source this console is not allowed to run.
+        code = 409 if state.get("error") == "collection_already_running" else 400
+        return JSONResponse(state, status_code=code)
+    return JSONResponse(state, status_code=202)
+
+
+@app.get("/collect", response_class=HTMLResponse)
+def collect_page(request: Request):
+    """Operator collection surface. This GET renders state only — it reads the
+    controller's snapshot and the canonical run history, and starts nothing."""
+    from dashboard.collector_ui import badge
+    from dashboard.local_collection import SMARTPHONE_FIELD_TEST_SOURCES
+
+    controller = _collection_controller
+    sources = controller.sources() if controller is not None else []
+    status = controller.snapshot() if controller is not None else None
+    for source in sources:
+        source["maturity_badge"] = badge(
+            "PRODUCTION" if source["maturity"] == "production" else "EXPERIMENTAL"
+        )
+        source["enabled_badge"] = badge("MANUAL" if source["enabled"] else "DISABLED")
+        source["last_badge"] = badge(
+            _RUN_STATUS_LABELS.get(source["last_status"], source["last_status"])
+            if source["last_status"] else "UNKNOWN"
+        )
+    return TEMPLATES.TemplateResponse(request, "collect.html", {
+        "active": "collect",
+        "sources": sources,
+        "status": status,
+        "available": controller is not None,
+        "unavailable_reason": _collection_unavailable_reason,
+        "database_url": str(_engine.url) if _engine is not None else "",
+        "source_count": len(SMARTPHONE_FIELD_TEST_SOURCES),
+    })
+
+
+# Canonical run statuses mapped onto the shared design-system vocabulary, so
+# the Collect page and Run History label the same state the same way.
+_RUN_STATUS_LABELS = {
+    "success": "SUCCESS",
+    "partial": "PARTIAL",
+    "degraded": "DEGRADED",
+    "unexpected_zero": "PARTIAL",
+    "failed": "FAILED",
+    "blocked": "BLOCKED",
+    "running": "RUNNING",
+}
 
 
 @app.get("/about", response_class=HTMLResponse)
@@ -221,7 +325,16 @@ def about_page(request: Request):
                 "oems": sorted(PRODUCTION_OEM_SCOPE),
                 "device_count": session.query(Device).count(),
                 "run_count": session.query(CollectorRunRecord).count(),
-                "collection_badge": badge("DISABLED"),
+                # Collection posture is an axis, not a boolean: MANUAL means
+                # operator-triggered only, DISABLED means not runnable here.
+                "collection_badge": badge(
+                    "MANUAL" if _collection_controller is not None else "DISABLED"
+                ),
+                "collection_note": (
+                    "operator-triggered only — opening a page never collects"
+                    if _collection_controller is not None
+                    else "no collection controller wired into this process"
+                ),
                 "delivery_badge": badge("DISABLED"),
             },
         })
@@ -254,8 +367,16 @@ def device_queue(
                 )
             )
         devices = query.order_by(Device.last_seen.desc()).limit(100).all()
-        return TEMPLATES.TemplateResponse(request, "devices.html", { "devices": devices, "q": q or "", "manufacturer": manufacturer or ""},
-        )
+        # "No matches for your filter" and "this database has no devices" are
+        # different facts. The page needs both to tell them apart, otherwise an
+        # empty database reads as a bad search.
+        return TEMPLATES.TemplateResponse(request, "devices.html", {
+            "devices": devices,
+            "q": q or "",
+            "manufacturer": manufacturer or "",
+            "filtered": bool(q or manufacturer or min_conf is not None),
+            "total_devices": session.query(Device).count(),
+        })
     finally:
         session.close()
 

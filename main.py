@@ -1129,6 +1129,30 @@ def samsung_discover_sitemap(
         console.print(f"  [yellow]{stats.errors[:5]}[/yellow]")
 
 
+def _build_collection_controller(settings, database_url: str):
+    """Build the canonical LocalCollectionController, or report why we cannot.
+
+    Returns ``(controller, unavailable_reason)``. Construction validates the
+    production registry and the DB/environment guard, so a genuine scope or
+    schema problem must surface as a stated reason on the Collect page — never
+    as a silently missing button.
+    """
+    try:
+        from dashboard.local_collection import LocalCollectionController
+        from database.session import get_session_factory
+        from pipeline import IntelligencePipeline
+
+        session_factory = get_session_factory(database_url)
+        pipeline = IntelligencePipeline(settings, session_factory)
+        return LocalCollectionController(
+            settings, session_factory, pipeline,
+            project_root=Path(__file__).resolve().parent,
+            database_url=database_url,
+        ), None
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
 @app.command()
 def dashboard(
     host: str = typer.Option("127.0.0.1", help="Bind host (default localhost only)"),
@@ -1149,8 +1173,28 @@ def dashboard(
         console.print(f"[red]Missing dashboard dependency: {e}[/red]")
         console.print("Run: .\\.venv\\Scripts\\python.exe -m pip install fastapi uvicorn jinja2")
         raise typer.Exit(1)
-    dash_app = create_app(settings.database_url)
-    console.print(f"[green]Newsroom console: http://{host}:{port}/[/green]")
+
+    # Resolve the sqlite path ONCE and hand the same absolute URL to the
+    # dashboard and to the collection controller. Importing runtime.run_once
+    # (which the controller does) chdirs to the repo root, so a relative
+    # configured URL would otherwise be able to resolve to two different files
+    # depending on where the operator launched from — the UI would show an
+    # empty database while collection wrote somewhere else.
+    from database.session import resolve_database_url
+    database_url = resolve_database_url(settings.database_url)
+
+    controller, unavailable = _build_collection_controller(settings, database_url)
+    dash_app = create_app(
+        database_url,
+        collection_controller=controller,
+        collection_unavailable_reason=unavailable,
+    )
+    console.print(f"[green]Operator console: http://{host}:{port}/[/green]")
+    console.print(f"[green]Database:         {database_url}[/green]")
+    if controller is not None:
+        console.print("[green]Collect page:     explicit operator runs enabled[/green]")
+    else:
+        console.print(f"[yellow]Collect page:     unavailable — {unavailable}[/yellow]")
     # Reuse the already-resolved settings so `--config` and CLANK_DATA_DIR are
     # applied consistently. Reloading settings here used to discard --config.
     uvicorn.run(dash_app, host=host, port=port, reload=False, log_level="info")

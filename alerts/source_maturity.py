@@ -27,7 +27,9 @@ MATURITY_SOAK = "soak"
 # production scheduling (systemd timers per deploy/systemd/ + Samsung cron).
 # samsung_support / samsung_firmware / *_ota legacy collectors are disabled
 # by config and therefore intentionally absent: if one is ever re-enabled it
-# re-enters soak by default.
+# re-enters soak by default. That is an enabled-state decision, not a
+# maturity one, and the 2026-09-05 promotion deliberately did not touch it --
+# promoting maturity must never revive a source disabled for its own reason.
 PRODUCTION_SOURCES = frozenset({
     # legacy registry
     "samsung_us_support_sitemap",
@@ -40,6 +42,14 @@ PRODUCTION_SOURCES = frozenset({
     "honor_global_sitemap",
     "oppo_global_sitemap",
     "realme_regional_sitemap",
+    # Promoted 2026-09-05 by explicit operator decision, which overrides the
+    # soak/promotion queue rather than re-running it. Already CANARY: real
+    # collector, LIVE_VALIDATED, running under production execution since
+    # 2026-08-30 (baseline + 32 clean repeat cycles). This edit grants the
+    # notification authority that CANARY deliberately withheld -- the very
+    # "separate, explicit edit" the canary contract in collectors/__init__.py
+    # names as the promotion path.
+    "samsung_us_owners_product",
 })
 
 

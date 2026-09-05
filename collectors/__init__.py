@@ -15,6 +15,7 @@ import yaml
 
 from collectors.base import BaseCollector
 from collectors.bluetooth_sig import BluetoothSIGCollector
+from alerts.source_maturity import MATURITY_PRODUCTION, source_maturity
 from collectors.samsung_support import SamsungSupportCollector
 from collectors.samsung.sitemap_collector import SamsungSitemapCollector
 from collectors.generic_support import GenericSupportCollector
@@ -284,12 +285,18 @@ def build_collectors(
             )
             col.capability = "discovery"  # type: ignore[attr-defined]
             col.validation_status = status  # type: ignore[attr-defined]
-            col.maturity = "canary"  # type: ignore[attr-defined]
+            # Maturity follows the authority registry, not the lane: a canary
+            # source that has received the reviewed promotion edit reports
+            # production, while one still awaiting it reports canary.
+            col.maturity = (  # type: ignore[attr-defined]
+                "production" if source_maturity(canary_id) == MATURITY_PRODUCTION else "canary"
+            )
             registry.append(col)
             logger.info(
-                "Registered CANARY collector: %s (%s) — production execution, "
-                "notifications suppressed by policy (alerts/source_maturity.py)",
-                canary_id, status,
+                "Registered CANARY-lane collector: %s (%s) — production "
+                "execution; notification authority per alerts/source_maturity.py "
+                "(maturity=%s)",
+                canary_id, status, col.maturity,
             )
 
     add("bluetooth_sig", BluetoothSIGCollector, manufacturers=manufacturers)

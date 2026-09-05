@@ -81,22 +81,37 @@ def test_currently_promoted_sources_hold_production_authority():
 
 def test_unknown_and_absent_sources_fail_closed_to_soak():
     assert source_maturity("brand_new_unannounced_source") == MATURITY_SOAK
-    assert source_maturity("samsung_us_owners_product") == MATURITY_SOAK
+    # samsung_us_owners_product was promoted to production maturity on
+    # 2026-09-05 (explicit operator decision), so it is no longer an example
+    # of the fail-closed default. The default itself is unchanged and is
+    # still proven by the unknown/None cases above and below.
+    assert source_maturity("another_unregistered_source") == MATURITY_SOAK
     assert source_maturity(None) == MATURITY_SOAK
     assert notifications_allowed(None) is False
 
 
-def test_canary_stage_confers_no_notification_authority():
-    """CANARY (since 2026-08-30) means production execution with the source
-    still absent from PRODUCTION_SOURCES: fail-closed soak classification
-    suppresses every newsroom send. Only a reviewed edit to this registry —
-    not the canary transition itself — grants authority (Fleet Law 8)."""
+def test_canary_membership_alone_still_confers_no_authority():
+    """CANARY means production execution while authority is decided
+    separately in PRODUCTION_SOURCES. That separation is the invariant, and
+    it survives the 2026-09-05 promotion: authority still comes only from a
+    reviewed edit to this registry, never from the canary transition itself
+    (Fleet Law 8).
+
+    samsung_us_owners_product has now received exactly that reviewed edit,
+    so it is production. A canary source that has NOT been granted authority
+    is still suppressed — proven here with a hypothetical member so the
+    guarantee keeps a test even though the real canary set is now fully
+    promoted."""
     from collectors import CANARY_SAMSUNG_SOURCE_IDS
 
     assert "samsung_us_owners_product" in CANARY_SAMSUNG_SOURCE_IDS
-    assert CANARY_SAMSUNG_SOURCE_IDS & PRODUCTION_SOURCES == set()
-    assert source_maturity("samsung_us_owners_product") == MATURITY_SOAK
-    assert notifications_allowed("samsung_us_owners_product") is False
+    # Promoted: canary AND production is now a legitimate combination.
+    assert source_maturity("samsung_us_owners_product") == "production"
+    assert notifications_allowed("samsung_us_owners_product") is True
+    # The mechanism is unchanged: membership in the canary set is not what
+    # grants authority — absence from PRODUCTION_SOURCES still suppresses.
+    assert source_maturity("hypothetical_future_canary") == MATURITY_SOAK
+    assert notifications_allowed("hypothetical_future_canary") is False
 
 
 # -- suppression evidence ---------------------------------------------------------
@@ -123,7 +138,11 @@ def test_soak_source_suppression_is_explicit_and_evidence_bearing():
         "content irrelevant",
         reason="new_model",
         extra_eligible=True,
-        source_id="samsung_us_owners_product",
+        # A source with soak maturity. samsung_us_owners_product used to
+        # serve here; it was promoted to production on 2026-09-05, so the
+        # suppression mechanism is now proven with a source that is actually
+        # still soak — the behaviour under test is unchanged.
+        source_id="unpromoted_soak_source",
         session=session,
     )
     session.commit()
@@ -197,3 +216,45 @@ def test_maturity_gate_is_independent_of_enabled_flag():
 
     rows = session.execute(text("SELECT suppressed FROM webhook_deliveries")).fetchall()
     assert all(r.suppressed == 1 for r in rows)
+
+
+# ---------------------------------------------------------------- promotion guard
+
+
+def test_no_active_collector_holds_non_production_maturity():
+    """Fleet guard (operator decision 2026-09-05): every ACTIVE collector
+    holds production maturity. Sources disabled for their own reason are a
+    separate axis and are deliberately excluded — promotion moves maturity,
+    it does not enable a disabled source."""
+    from alerts.source_maturity import MATURITY_PRODUCTION, source_maturity
+    from collectors import CANARY_SAMSUNG_SOURCE_IDS, RUNNABLE_SAMSUNG_SOURCE_IDS
+
+    # samsung_support is enabled: false in config/config.yaml ("secondary
+    # monitoring only"), so it is not an active collector.
+    disabled_by_config = {"samsung_support"}
+    active = (RUNNABLE_SAMSUNG_SOURCE_IDS | CANARY_SAMSUNG_SOURCE_IDS) - disabled_by_config
+
+    stragglers = [s for s in sorted(active) if source_maturity(s) != MATURITY_PRODUCTION]
+    assert stragglers == [], f"active collectors still below production maturity: {stragglers}"
+
+
+def test_promotion_did_not_enable_a_config_disabled_source():
+    """samsung_support stays disabled and stays soak. Promoting maturity must
+    never silently switch on a source that is off for another reason."""
+    import yaml
+
+    from alerts.source_maturity import MATURITY_SOAK, source_maturity
+
+    repo_root = Path(__file__).resolve().parent.parent
+    cfg = yaml.safe_load((repo_root / "config" / "config.yaml").read_text(encoding="utf-8"))
+    assert cfg["collectors"]["samsung_support"]["enabled"] is False
+    assert source_maturity("samsung_support") == MATURITY_SOAK
+
+
+def test_fail_closed_default_survives_the_promotion():
+    """The maturity gate is still fail-closed for anything unregistered."""
+    from alerts.source_maturity import MATURITY_SOAK, notifications_allowed, source_maturity
+
+    assert source_maturity("never_seen_before") == MATURITY_SOAK
+    assert source_maturity(None) == MATURITY_SOAK
+    assert notifications_allowed("never_seen_before") is False

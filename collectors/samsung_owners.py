@@ -49,7 +49,10 @@ logger = logging.getLogger("clank.collectors.samsung_owners")
 class SamsungOwnersCollector(BaseCollector):
     name = "samsung_us_owners_product"
     source_type = SourceType.SUPPORT_PAGE
-    maturity = "soak"
+    # Promoted to production maturity 2026-09-05 (explicit operator
+    # decision). Health/validation status is untouched and still
+    # reported independently.
+    maturity = "production"
 
     BASE_URL = "https://www.samsung.com/us/support/owners/product/"
     # Seed slugs validated live 2026-08-02 (config/samsung_sources.yaml).

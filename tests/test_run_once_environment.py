@@ -175,6 +175,9 @@ def test_soak_source_notification_suppressed_regardless_of_enabled_config():
 
     from collectors.samsung_owners import SamsungOwnersCollector
 
-    # sanity: the source still reports soak maturity
-    assert SamsungOwnersCollector.maturity == "soak"
-    assert notifications_allowed("samsung_us_owners_product") is False
+    # samsung_us_owners_product was promoted to production maturity on
+    # 2026-09-05. The invariant under test is that CONFIG cannot flip
+    # notification eligibility — that is still maturity-driven, proven below
+    # with a source that has no production authority.
+    assert SamsungOwnersCollector.maturity == "production"
+    assert notifications_allowed("source_without_production_authority") is False

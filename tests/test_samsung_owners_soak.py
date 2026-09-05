@@ -192,12 +192,15 @@ def test_canary_source_is_in_production_scope():
     assert SOAK_SAMSUNG_SOURCE_IDS & scope == set()
 
 
-def test_canary_never_implies_notification_authority():
-    """The heart of the canary contract: production execution WITHOUT
-    notification authority. alerts/source_maturity.py still classifies the
-    source soak (fail-closed, absent from PRODUCTION_SOURCES) and the canary
-    allowlist must never overlap the production registry — full production
-    requires the separate, reviewed edit to that module (Fleet Law 8)."""
+def test_canary_authority_comes_only_from_the_reviewed_registry_edit():
+    """The heart of the canary contract is that authority is decided ONLY by
+    a reviewed edit to alerts/source_maturity.py, never by the canary
+    transition itself (Fleet Law 8). That mechanism is unchanged.
+
+    samsung_us_owners_product received exactly that reviewed edit on
+    2026-09-05 (explicit operator promotion of every soak/experimental
+    maturity to production), so it now holds authority; a canary source
+    without the edit still would not."""
     from alerts.source_maturity import (
         MATURITY_SOAK,
         PRODUCTION_SOURCES,
@@ -207,15 +210,22 @@ def test_canary_never_implies_notification_authority():
 
     from collectors import CANARY_SAMSUNG_SOURCE_IDS
 
-    assert CANARY_SAMSUNG_SOURCE_IDS & PRODUCTION_SOURCES == set()
-    assert source_maturity("samsung_us_owners_product") == MATURITY_SOAK
-    assert notifications_allowed("samsung_us_owners_product") is False
+    # Promoted: the canary lane and the authority registry may now overlap
+    # for this source, because it received the reviewed edit.
+    assert source_maturity("samsung_us_owners_product") == "production"
+    assert notifications_allowed("samsung_us_owners_product") is True
+    # The mechanism itself is untouched: a canary source WITHOUT the edit
+    # still has no authority, and unknown sources still fail closed.
+    assert source_maturity("canary_without_registry_edit") == MATURITY_SOAK
+    assert notifications_allowed("canary_without_registry_edit") is False
 
 
 def test_production_build_registers_canary_collector():
-    """Default build_collectors() (production path) registers the canary
-    collector with maturity='canary'. The flag itself grants no delivery
-    authority — suppression lives in alerts/discord.py's maturity gate."""
+    """Default build_collectors() (production path) registers the canary-lane
+    collector. Its reported maturity now follows the authority registry, so
+    after the 2026-09-05 promotion it registers as 'production'; delivery
+    authority still comes from alerts/source_maturity.py, never from the
+    lane."""
 
     class _Settings:
         def get(self, key, *args, **kwargs):
@@ -229,15 +239,19 @@ def test_production_build_registers_canary_collector():
     registry = build_collectors(_Settings(), project_root=ROOT)
     canary = [c for c in registry if c.name == "samsung_us_owners_product"]
     assert len(canary) == 1
-    assert getattr(canary[0], "maturity") == "canary"
+    # Reports production since the 2026-09-05 promotion: maturity follows
+    # the authority registry, not the lane it was registered through.
+    assert getattr(canary[0], "maturity") == "production"
     assert getattr(canary[0], "validation_status") == "LIVE_VALIDATED"
     assert getattr(canary[0], "capability") == "discovery"
 
 
 def test_soak_route_no_longer_registers_promoted_source_as_soak():
     """include_soak=True no longer registers the promoted source as soak (its
-    soak stage concluded); the source appears — via the canary block — as
-    canary. The class-level default maturity stays the conservative 'soak'."""
+    soak stage concluded); it appears via the canary block. Since the
+    2026-09-05 operator promotion both the registered instance and the
+    class-level default report production maturity — one coherent backend
+    truth rather than an instance/class split."""
 
     class _Settings:
         def get(self, key, *args, **kwargs):
@@ -251,14 +265,18 @@ def test_soak_route_no_longer_registers_promoted_source_as_soak():
     registry = build_collectors(_Settings(), project_root=ROOT, include_soak=True)
     owners = [c for c in registry if c.name == "samsung_us_owners_product"]
     assert len(owners) == 1
-    assert getattr(owners[0], "maturity") == "canary"
-    assert SamsungOwnersCollector.maturity == "soak"
+    assert getattr(owners[0], "maturity") == "production"
+    assert SamsungOwnersCollector.maturity == "production"
 
 
 def test_maturity_policy_keeps_soak_notifications_suppressed():
     """Defense in depth: even if a soak source's discoveries were processed
     somewhere with a live webhook configured, alerts/source_maturity.py
-    suppresses newsroom delivery."""
+    suppresses newsroom delivery.
+
+    Proven with a source that is genuinely still soak —
+    samsung_us_owners_product was promoted to production on 2026-09-05, so
+    it is no longer an example of suppression."""
     from alerts.source_maturity import notifications_allowed
 
-    assert notifications_allowed("samsung_us_owners_product") is False
+    assert notifications_allowed("still_soak_source") is False

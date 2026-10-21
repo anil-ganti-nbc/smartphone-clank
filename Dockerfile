@@ -5,7 +5,7 @@
 # scheduler (cron/systemd timer) invokes this repeatedly; each invocation
 # checks every collector's due status against its own persisted run
 # history and runs whichever are due, then exits.
-FROM python:3.12-slim@sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a AS base
+FROM python:3.12-slim@sha256:2259debdc6af85626058a15a7bf44ad6a68b8c98c9ae82a02cf5cdb92f096d47 AS base
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin clank
 

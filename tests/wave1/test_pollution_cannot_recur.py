@@ -35,7 +35,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from collectors.generic_support import OEM_CONFIG
 from collectors.wave1.google.model_validator import validate as validate_google

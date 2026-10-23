@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.engine.url import make_url
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config" / "config.yaml"
@@ -269,7 +270,7 @@ def test_J_dashboard_and_collector_resolve_the_same_database(tmp_path, monkeypat
     controller, database_url, _ = _real_controller(tmp_path, monkeypatch)
     create_app(database_url, collection_controller=controller)
 
-    assert str(dashboard_app._engine.url) == database_url
+    assert dashboard_app._engine.url == make_url(database_url)
     assert controller.database_url == database_url
     assert Path(database_url.removeprefix("sqlite:///")).is_absolute()
 

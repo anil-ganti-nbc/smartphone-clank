@@ -14,7 +14,7 @@ from typing import Any, Optional
 
 import httpx
 import yaml
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from collectors.samsung.model_validator import SamsungModelValidator, ModelValidation
 from models.schemas import Discovery, Manufacturer, SourceType

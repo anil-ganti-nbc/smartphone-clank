@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from collectors.base import BaseCollector
 from models.schemas import Discovery, Manufacturer, SourceType

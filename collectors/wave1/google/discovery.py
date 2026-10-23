@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit
 
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from collectors.wave1.adapter import (
     DISCOVERY,

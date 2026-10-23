@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 logger = logging.getLogger("clank.change_detection")
 

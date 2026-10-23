@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 import pytest
+from sqlalchemy.engine.url import make_url
 
 from config.settings import load_settings
 from database.schema_guard import init_fresh_database
@@ -82,7 +83,7 @@ def test_dashboard_and_collector_use_the_same_configured_database(monkeypatch, t
     from dashboard import app as dashboard_app
 
     dashboard_app.create_app(settings.database_url)
-    assert str(dashboard_app._engine.url) == settings.database_url
+    assert dashboard_app._engine.url == make_url(settings.database_url)
     assert SamsungSitemapCollector(database_url=settings.database_url).database_url == settings.database_url
     assert dashboard_app.TEMPLATES.env.globals["runtime_identity"]["database_revision"] != "unstamped"
 
